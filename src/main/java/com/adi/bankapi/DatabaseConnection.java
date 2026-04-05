@@ -1,3 +1,5 @@
+package com.adi.bankapi;
+
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -5,12 +7,12 @@ import java.sql.SQLException;
 public class DatabaseConnection {
     // The connection path to local PostgreSQL server and bank_db
     private static final String URL = "jdbc:postgresql://localhost:5432/bank_db";
-    
+
     // Mac username that owns the database
-    private static final String USER = "adityasanjaybhore"; 
-    
+    private static final String USER = "adityasanjaybhore";
+
     // Homebrew default has no password
-    private static final String PASSWORD = ""; 
+    private static final String PASSWORD = "";
 
     // This method attempts to open a connection and return it
     public static Connection getConnection() {

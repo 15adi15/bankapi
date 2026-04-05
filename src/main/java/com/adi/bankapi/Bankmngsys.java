@@ -1,3 +1,5 @@
+package com.adi.bankapi;
+
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
@@ -5,20 +7,22 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 //-------------------MAIN CLASS----------------------
 public class Bankmngsys {
-    public static void main(String args[]) {
-        Saving_acc s1 = new Saving_acc("Aditya", 1234, 10000, 4.5);
+    // public static void main(String args[]) {
+    // Saving_acc s1 = new Saving_acc("Aditya", 1234, 10000, 4.5);
 
-        try {
-            // Attempting to withdraw with the wrong PIN to trigger an error
-            s1.withdraw(500, 9999);
-        } catch (SecurityException e) {
-            System.out.println("Security Alert: " + e.getMessage());
-        } catch (IllegalStateException | IllegalArgumentException e) {
-            System.out.println("Transaction Error: " + e.getMessage());
-        }
-    }
+    // try {
+    // // Attempting to withdraw with the wrong PIN to trigger an error
+    // s1.withdraw(500, 9999);
+    // } catch (SecurityException e) {
+    // System.out.println("Security Alert: " + e.getMessage());
+    // } catch (IllegalStateException | IllegalArgumentException e) {
+    // System.out.println("Transaction Error: " + e.getMessage());
+    // }
+    // }
 }
 
 // -------------------BANK CLASS----------------------
@@ -64,10 +68,10 @@ class Branch {
 // --------------------ACCOUNT CLASS------------------------
 abstract class Accounts {
     protected String username;
-    private String hashed_pin;
     private final int acc_num;
     protected double balance;// protected so that it can be accessed by subclasses only.
-
+    @JsonIgnore
+    private String hashed_pin;
     // a hash set to ensure uniqueness accross all the instances of account number.
     private static Set<Integer> existingAccountNumbers = new HashSet<>();
 
@@ -159,7 +163,7 @@ abstract class Accounts {
         transactions.add(new Transaction("Withdraw", amount, balance));
     }
 
-    public void Deposit(int amount) {
+    public void Deposit(double amount) {
         if (amount < 0) {
             throw new IllegalArgumentException("Deposit amount can not be negative.");
         }
@@ -205,7 +209,6 @@ class Saving_acc extends Accounts {
 
     // DataBase Constructor that is invoked when details of existing account is
     // fecthed.
-
     public Saving_acc(int acc_num, String username, String hashed_pin, double balance, double interestRate) {
         super(acc_num, username, hashed_pin, balance); // Calls the parent DB constructor
         this.interestRate = interestRate;
@@ -271,11 +274,11 @@ class Credit_acc extends Accounts {
 
 class Transaction {
     private String type;
-    private int amount;
+    private double amount;
     private double balance_after;
     private LocalDateTime timestamp;
 
-    public Transaction(String type, int amount, double balance_after) {
+    public Transaction(String type, double amount, double balance_after) {
         this.type = type;
         this.amount = amount;
         this.balance_after = balance_after;

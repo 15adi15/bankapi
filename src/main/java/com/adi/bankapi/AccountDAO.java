@@ -1,9 +1,12 @@
+package com.adi.bankapi;
+
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.ResultSet;
 
-public class AccountDOA {
+class AccountDAO {
+    // Inseritng into data base
     public void saveAccount(Accounts account) {// takes any type of "Account" object as input.
 
         String sql = "INSERT INTO accounts (acc_num, username, hashed_pin, balance, account_type, interest_rate, transaction_limit) VALUES(?,?,?,?,?,?,?)";
@@ -37,15 +40,16 @@ public class AccountDOA {
         }
     }
 
-    public Accounts getAccountByUsername(String username) {
+    // fecthing from database
+    public Accounts getAccountByAccnum(int accNum) {
         // We select the specific columns we need
-        String sql = "SELECT acc_num, username, hashed_pin, balance, account_type, interest_rate FROM accounts WHERE username = ?";
+        String sql = "SELECT * FROM accounts WHERE acc_num = ?";
         Accounts fetchedAccount = null;
 
         try (Connection conn = DatabaseConnection.getConnection(); // Fixed the lowercase 'b'
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
-            pstmt.setString(1, username);
+            pstmt.setInt(1, accNum);
 
             try (ResultSet rs = pstmt.executeQuery()) {
                 if (rs.next()) {
@@ -61,13 +65,35 @@ public class AccountDOA {
                     if ("SAVINGS".equals(type)) {
                         double dbInterestRate = rs.getDouble("interest_rate");
                         fetchedAccount = new Saving_acc(dbAccNum, dbUsername, dbHashedPin, dbBalance, dbInterestRate);
+                    } else if ("CREDIT".equals(type)) {
+                        double dbInterestRate = rs.getDouble("interest_rate");
+                        fetchedAccount = new Credit_acc(dbUsername, dbAccNum, dbBalance, dbInterestRate, dbAccNum);
                     }
-                    // else if ("CREDIT".equals(type)) { ... logic for credit account ... }
                 }
             }
         } catch (SQLException e) {
             System.err.println("Database error: " + e.getMessage());
         }
         return fetchedAccount;
+    }
+
+    // updating the database
+    public void updateAccountBalance(int accNum, double newBalance) {
+        // the update query
+        String sql = "UPDATE accounts SET balance = ? WHERE acc_num= ?";
+        // establish the connection
+        try (Connection conn = DatabaseConnection.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setDouble(1, newBalance);
+            pstmt.setInt(2, accNum); // Targeting the Primary Key
+
+            int rowsAffected = pstmt.executeUpdate();
+            if (rowsAffected == 0) {
+                System.out.println("Warning: No account found for Acc Num: " + accNum);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
     }
 }
