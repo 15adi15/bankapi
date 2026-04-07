@@ -3,6 +3,7 @@ package com.adi.bankapi;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
+@CrossOrigin(origins = "http://localhost:5173")
 @RequestMapping("/api/accounts")
 public class AccountController {
 
