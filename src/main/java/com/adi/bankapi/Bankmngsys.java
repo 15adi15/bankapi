@@ -11,18 +11,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 
 //-------------------MAIN CLASS----------------------
 public class Bankmngsys {
-    // public static void main(String args[]) {
-    // Saving_acc s1 = new Saving_acc("Aditya", 1234, 10000, 4.5);
 
-    // try {
-    // // Attempting to withdraw with the wrong PIN to trigger an error
-    // s1.withdraw(500, 9999);
-    // } catch (SecurityException e) {
-    // System.out.println("Security Alert: " + e.getMessage());
-    // } catch (IllegalStateException | IllegalArgumentException e) {
-    // System.out.println("Transaction Error: " + e.getMessage());
-    // }
-    // }
 }
 
 // -------------------BANK CLASS----------------------
