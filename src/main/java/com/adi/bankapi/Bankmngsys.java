@@ -58,16 +58,16 @@ class Branch {
 abstract class Accounts {
     protected String username;
     private final int acc_num;
-    protected double balance;// protected so that it can be accessed by subclasses only.
+    protected double balance;// Protected so that it can be accessed by subclasses only.
     @JsonIgnore
     private String hashed_pin;
-    // a hash set to ensure uniqueness accross all the instances of account number.
+    // A hash set to ensure uniqueness accross all the instances of account number.
     private static Set<Integer> existingAccountNumbers = new HashSet<>();
 
-    // dynamic list for transaction
+    // Dynamic list for transaction
     protected List<Transaction> transactions = new ArrayList<>();
 
-    // non breakable abstract method to set limit for indivisual account types.
+    // Non breakable abstract method to set limit for indivisual account types.
     protected abstract boolean checkTransactionLimit(int amount);
 
     // Constructor to create an Account.
@@ -132,7 +132,8 @@ abstract class Accounts {
         }
     }
 
-    // withdraw and deposit class that include the throwing exception logic.
+    // WITRHDRAW and DEPOSIT class that include the throwing exception logic.
+    // Withdraw Method.
     public void withdraw(int amount, int enteredPin) {
         // hashing the entered pin and compared to stored hash.
         if (!this.hashed_pin.equals(hashPin(String.valueOf(enteredPin)))) {
@@ -152,6 +153,7 @@ abstract class Accounts {
         transactions.add(new Transaction("Withdraw", amount, balance));
     }
 
+    // Deposit Method.
     public void Deposit(double amount) {
         if (amount < 0) {
             throw new IllegalArgumentException("Deposit amount can not be negative.");
