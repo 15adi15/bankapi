@@ -45,7 +45,7 @@ public class AccountController {
 
         accountDAO.saveAccount(newAccount);
         return "Success! New Account created for " + requestData.username + " with account number "
-                + newAccount.getaccnum();
+                + newAccount.getAccnum();
     }
 
     // ------The Transaction end point-------
@@ -100,8 +100,8 @@ public class AccountController {
             // step 2: secure deposit
             receiver.Deposit(data.amount);
             // step 3: database sync
-            accountDAO.updateAccountBalance(sender.getaccnum(), sender.getBalance());
-            accountDAO.updateAccountBalance(receiver.getaccnum(), receiver.getBalance());
+            accountDAO.updateAccountBalance(sender.getAccnum(), sender.getBalance());
+            accountDAO.updateAccountBalance(receiver.getAccnum(), receiver.getBalance());
 
             return "Transaction Successfull! Sent ₹" + data.amount + " to " + receiver.username;
         } catch (Exception e) {

@@ -16,11 +16,11 @@ class AccountDAO {
         // to close the connection and statement when work is done
         try (Connection conn = DatabaseConnection.getConnection();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setInt(1, account.getaccnum());
+            pstmt.setInt(1, account.getAccnum());
             pstmt.setString(2, account.getUsername());
             pstmt.setString(3, account.getHashedPin());
             pstmt.setDouble(4, account.getBalance());
-            pstmt.setString(5, account.getaccount_type());
+            pstmt.setString(5, account.getAccount_type());
             // Map the specific subclass variables to 6 and 7
             if (account instanceof Saving_acc) {
                 pstmt.setDouble(6, ((Saving_acc) account).getInterestRate());
@@ -29,7 +29,7 @@ class AccountDAO {
                 pstmt.setDouble(6, ((Credit_acc) account).getInterestRate());
                 pstmt.setInt(7, ((Credit_acc) account).getMaxSwipeLimit());
             }
-            pstmt.setString(8, account.getemail());
+            pstmt.setString(8, account.getEmail());
 
             if (account instanceof Saving_acc) {
                 pstmt.setString(5, "SAVINGS");
@@ -45,7 +45,7 @@ class AccountDAO {
             }
             int rowsAffected = pstmt.executeUpdate();
             if (rowsAffected > 0) {
-                System.out.println("Account " + account.getaccnum() + " was successfully saved to the database!");
+                System.out.println("Account " + account.getAccnum() + " was successfully saved to the database!");
             }
         } catch (SQLException e) {
             System.out.println("Error saving account: " + e.getMessage());
@@ -70,12 +70,15 @@ class AccountDAO {
                     String dbHashedPin = rs.getString("hashed_pin");
                     double dbBalance = rs.getDouble("balance");
                     String type = rs.getString("account_type");
+                    int dbLimit = rs.getInt("transaction_limit");
+                    double dbInterestRate = rs.getDouble("interest_rate");
 
                     if ("SAVINGS".equals(type)) {
-                        fetchedAccount = new Saving_acc(dbAccNum, dbUsername, dbHashedPin, dbBalance, dbBalance, email);
+                        fetchedAccount = new Saving_acc(dbLimit, dbUsername, dbHashedPin, dbBalance, dbInterestRate,
+                                email);
                     } else if ("CREDIT".equals(type)) {
-                        fetchedAccount = new Credit_acc(dbAccNum, dbUsername, dbHashedPin, dbBalance, dbBalance,
-                                dbAccNum, email);
+                        fetchedAccount = new Credit_acc(dbAccNum, dbUsername, dbHashedPin, dbBalance, dbInterestRate,
+                                dbLimit, email);
                     }
                 }
             }

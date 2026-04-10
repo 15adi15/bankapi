@@ -90,28 +90,28 @@ abstract class Accounts {
         this.email = email;
     }
 
-    public int getaccnum() {
-        return acc_num;
+    public int getAccnum() {
+        return this.acc_num;
     }
 
     public String getHashedPin() {
-        return hashed_pin;
+        return this.hashed_pin;
     }
 
     public String getUsername() {
-        return username;
+        return this.username;
     }
 
     public double getBalance() {
-        return balance;
+        return this.balance;
     }
 
-    public String getemail() {
-        return email;
+    public String getEmail() {
+        return this.email;
     }
 
-    public String getaccount_type() {
-        return account_type;
+    public String getAccount_type() {
+        return this.account_type;
     }
 
     // System will generate new account numbers each time
@@ -216,6 +216,7 @@ class Saving_acc extends Accounts {
             String email) {
         super(acc_num, username, hashed_pin, balance, email); // Calls the parent DB constructor
         this.interestRate = interestRate;
+        this.account_type = "SAVINGS";
     }
 
     public double getInterestRate() {
@@ -243,6 +244,7 @@ class Credit_acc extends Accounts {
         super(username, pin, balance, email);
         this.interestRate = interestRate;
         this.MAX_SWIPE_LIMIT = maxSwipeLimit;
+        this.account_type = "CREDIT";
 
         System.out.println("Credit Account created successfully!");
         System.out.println("Account Holder: " + this.username);

@@ -109,12 +109,12 @@ function App() {
 
   const handleUnlockSubmit = (e) => {
     e.preventDefault();
-    const targetAccount = accountData.find(a => a.acc_num === pinModalOpenFor);
+    const targetAccount = accountData.find(a => a.accnum === pinModalOpenFor);
 
     // As the real PIN is hashed and securely locked away in Java, 
     // we will simulate the validation with '1234' for now.
     if (targetAccount && pinInput === '1234') {
-      setUnlockedAccounts([...unlockedAccounts, targetAccount.acc_num]);
+      setUnlockedAccounts([...unlockedAccounts, targetAccount.accnum]);
       setPinModalOpenFor(null);
       setPinInput('');
       setPinError('');
@@ -527,21 +527,21 @@ function App() {
 
             <div style={{ display: 'grid', gap: '24px' }}>
               {accountData && accountData.map((account, index) => {
-                const isUnlocked = unlockedAccounts.includes(account.acc_num);
+                const isUnlocked = unlockedAccounts.includes(account.accnum);
 
                 return (
-                  <div key={account.acc_num} style={{ backgroundColor: theme.cardWhite, border: `1px solid ${theme.borderLight}`, borderRadius: '8px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', overflow: 'hidden', transition: 'all 0.3s' }}>
+                  <div key={account.accnum} style={{ backgroundColor: theme.cardWhite, border: `1px solid ${theme.borderLight}`, borderRadius: '8px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', overflow: 'hidden', transition: 'all 0.3s' }}>
                     {/* Header (Public) */}
                     <div style={{ padding: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: isUnlocked ? `1px solid ${theme.borderLight}` : 'none' }}>
                       <div>
                         <div style={{ fontSize: '12px', color: theme.textLight, textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '8px', fontWeight: 'bold' }}>{account.account_type || "ACCOUNT"}</div>
                         <h3 style={{ margin: '0 0 5px 0', color: theme.darkBrown, fontSize: '24px', fontWeight: '500' }}>{account.username}</h3>
-                        <div style={{ color: '#666', fontFamily: 'monospace', fontSize: '16px', letterSpacing: '1px' }}>•••• {String(account.acc_num).slice(-4)}</div>
+                        <div style={{ color: '#666', fontFamily: 'monospace', fontSize: '16px', letterSpacing: '1px' }}>•••• {String(account.accnum).slice(-4)}</div>
                       </div>
 
                       {!isUnlocked ? (
                         <button
-                          onClick={() => setPinModalOpenFor(account.acc_num)}
+                          onClick={() => setPinModalOpenFor(account.accnum)}
                           style={{ backgroundColor: 'transparent', border: `1px solid ${theme.bronze}`, color: theme.darkBrown, padding: '12px 24px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', fontWeight: '600', transition: 'all 0.2s' }}
                           onMouseOver={(e) => { e.currentTarget.style.backgroundColor = theme.bronze; e.currentTarget.style.color = 'white'; }}
                           onMouseOut={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = theme.darkBrown; }}
@@ -554,7 +554,7 @@ function App() {
                           <p style={{ color: theme.textLight, margin: '0 0 5px 0', fontSize: '14px' }}>Available Balance</p>
                           <h2 style={{ margin: 0, color: theme.forestGreen, fontSize: '36px', fontWeight: '300' }}>₹{account.balance ? account.balance.toLocaleString() : 0}</h2>
                           <button
-                            onClick={() => handleLockAccount(account.acc_num)}
+                            onClick={() => handleLockAccount(account.accnum)}
                             style={{ background: 'none', border: 'none', color: theme.textLight, fontSize: '12px', cursor: 'pointer', textDecoration: 'underline', marginTop: '10px', padding: 0 }}
                           >
                             Lock Account
