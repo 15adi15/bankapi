@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { logInWithGoogle, logOut } from './firebase';
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -6,50 +7,132 @@ function App() {
   const [authMode, setAuthMode] = useState('signin'); // 'signin' or 'signup'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState('accounts');
 
-  // --- DASHBOARD STATE ---
-  // In a real app, this would come from a Context Provider or Auth hook
-  const [accountNumber, setAccountNumber] = useState('100001'); // Using a dummy initial value for simulation
-  const [accountData, setAccountData] = useState(null);
+  // --- ACCOUNTS DATA STATE ---
+  const [unlockedAccounts, setUnlockedAccounts] = useState([]); // array of unlocked account ids
+  const [pinModalOpenFor, setPinModalOpenFor] = useState(null); // account id or null
+  const [pinInput, setPinInput] = useState('');
+  const [pinError, setPinError] = useState('');
   const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [accountData, setAccountData] = useState([]);
 
-  // --- API LOGIC (Fetch) ---
-  const fetchAccount = async (accNum) => {
-    setIsLoading(true);
+  // --- THE AUTH SYNC HANDSHAKE ---
+  const handleLogin = async () => {
     setError('');
-    
-    // Simulate slight network delay to show off the skeleton loader nicely
-    await new Promise(resolve => setTimeout(resolve, 800));
 
     try {
-      const response = await fetch(`http://localhost:8080/api/accounts/${accNum}`);
-      if (!response.ok) throw new Error("Account not found");
-      const data = await response.json();
-      setAccountData(data);
+      // 1. Talk to Google
+      const result = await logInWithGoogle();
+      const userEmail = result.user.email;
+      console.log("Firebase authenticated email:", userEmail);
+
+      // 2. Talk to Spring Boot
+      const response = await fetch('http://localhost:8080/api/accounts/auth/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: userEmail })
+      });
+
+      // 3. Parse the data safely
+      const rawText = await response.text();
+      let data;
+      try {
+        data = JSON.parse(rawText);
+      } catch (e) {
+        data = rawText;
+      }
+
+      console.log("SPRING BOOT RETURNED:", data);
+
+      // 4. Check for our explicit error messages
+      if (data === "NO_ACCOUNT_FOUND" || data.status === "NO_ACCOUNT_FOUND") {
+        setError(`No bank account found for ${userEmail}. Please open an account first.`);
+        return; // STOP here. Do not let them into the dashboard!
+      }
+
+      // 5. SUCCESS! Route the data to the dashboard
+      // If Java returned a List[], save it directly. If it returned one account {}, wrap it in an array [].
+      if (Array.isArray(data)) {
+        if (data.length === 0) {
+          setError(`No bank accounts linked to ${userEmail}.`);
+          return;
+        }
+        setAccountData(data);
+      } else {
+        setAccountData([data]);
+      }
+
+      // 6. Open the gates
+      setActiveTab('accounts');
+      setIsLoggedIn(true);
+      setShowAuthModal(false);
+
     } catch (err) {
-      setError("Error: Could not fetch account details. Make sure the backend is running and the account exists.");
-    } finally {
-      setIsLoading(false);
+      console.error(err);
+      setError("Authentication failed. Ensure your Spring Boot server is running.");
     }
   };
 
-  // Auto-fetch data when logged in and landing on the dashboard
-  useEffect(() => {
-    if (isLoggedIn && activeTab === 'dashboard' && !accountData && !isLoading) {
-      // In a real scenario, you would fetch based on the logged in user's token or session metadata
-      // Since it's hardcoded and we haven't touched the backend, we try to fetch 'accountNumber'
-      fetchAccount(accountNumber);
+  // Use mock data instead of fetch calls
+  const mockAccounts = [
+    {
+      id: 'acc1',
+      name: 'Aditya Bhore',
+      type: 'SAVINGS',
+      number: '402931000420',
+      maskedNumber: '•••• 0420',
+      balance: 1250000.00,
+      pin: '1234', // simulated correct PIN
+      transactions: [
+        { id: 't1', date: '2026-04-09', desc: 'Wire Transfer - Global Tech Infr.', amount: -45000 },
+        { id: 't2', date: '2026-04-08', desc: 'Direct Deposit - CORE WEALTH', amount: 320000 },
+        { id: 't3', date: '2026-04-05', desc: 'ATM Withdrawal', amount: -10000 }
+      ]
+    },
+    {
+      id: 'acc2',
+      name: 'Aditya Bhore',
+      type: 'CHECKING',
+      number: '402931009988',
+      maskedNumber: '•••• 9988',
+      balance: 45000.50,
+      pin: '1234',
+      transactions: [
+        { id: 't4', date: '2026-04-10', desc: 'Coffee Shop - Onyx', amount: -450 },
+        { id: 't5', date: '2026-04-02', desc: 'Online Shopping', amount: -12500 }
+      ]
     }
-  }, [isLoggedIn, activeTab]);
+  ];
+
+  const handleUnlockSubmit = (e) => {
+    e.preventDefault();
+    const targetAccount = accountData.find(a => a.acc_num === pinModalOpenFor);
+
+    // As the real PIN is hashed and securely locked away in Java, 
+    // we will simulate the validation with '1234' for now.
+    if (targetAccount && pinInput === '1234') {
+      setUnlockedAccounts([...unlockedAccounts, targetAccount.acc_num]);
+      setPinModalOpenFor(null);
+      setPinInput('');
+      setPinError('');
+    } else {
+      setPinError('Incorrect PIN for this account.');
+    }
+  };
+
+  const handleLockAccount = (accountId) => {
+    setUnlockedAccounts(unlockedAccounts.filter(id => id !== accountId));
+  };
 
   const handleLoginSubmit = (e) => {
     e.preventDefault();
     // // Firebase auth logic goes here
     setShowAuthModal(false);
     setIsLoggedIn(true);
-    setActiveTab('dashboard');
+    setActiveTab('accounts');
   };
 
   // --- PREMIUM UI THEME ---
@@ -75,7 +158,7 @@ function App() {
         {showAuthModal && (
           <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(43, 27, 23, 0.85)', zIndex: 2000, display: 'flex', justifyContent: 'center', alignItems: 'center', animation: 'fadeIn 0.2s' }}>
             <div style={{ backgroundColor: theme.cardWhite, padding: '40px', borderRadius: '12px', width: '100%', maxWidth: '400px', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', position: 'relative' }}>
-              <button 
+              <button
                 onClick={() => setShowAuthModal(false)}
                 style={{ position: 'absolute', top: '20px', right: '20px', background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: theme.textLight, transition: '0.2s' }}
                 onMouseOver={(e) => e.target.style.color = theme.darkBrown}
@@ -83,19 +166,19 @@ function App() {
               >
                 ✕
               </button>
-              
+
               <h2 style={{ textAlign: 'center', color: theme.darkBrown, marginTop: 0, marginBottom: '30px', fontWeight: '300' }}>
                 <strong style={{ fontWeight: '700' }}>CORE</strong> WEALTH
               </h2>
 
               <div style={{ display: 'flex', marginBottom: '30px', borderBottom: `2px solid ${theme.borderLight}` }}>
-                <button 
+                <button
                   onClick={() => setAuthMode('signin')}
                   style={{ flex: 1, padding: '10px', background: 'none', border: 'none', borderBottom: authMode === 'signin' ? `3px solid ${theme.darkBrown}` : '3px solid transparent', color: authMode === 'signin' ? theme.darkBrown : theme.textLight, fontWeight: authMode === 'signin' ? 'bold' : 'normal', cursor: 'pointer', transition: 'all 0.2s', marginBottom: '-2px', fontSize: '15px' }}
                 >
                   Sign In
                 </button>
-                <button 
+                <button
                   onClick={() => setAuthMode('signup')}
                   style={{ flex: 1, padding: '10px', background: 'none', border: 'none', borderBottom: authMode === 'signup' ? `3px solid ${theme.darkBrown}` : '3px solid transparent', color: authMode === 'signup' ? theme.darkBrown : theme.textLight, fontWeight: authMode === 'signup' ? 'bold' : 'normal', cursor: 'pointer', transition: 'all 0.2s', marginBottom: '-2px', fontSize: '15px' }}
                 >
@@ -103,11 +186,13 @@ function App() {
                 </button>
               </div>
 
+              {error && <div style={{ color: '#D32F2F', fontSize: '14px', marginBottom: '20px', textAlign: 'center', backgroundColor: '#FFEBEE', padding: '10px', borderRadius: '4px', border: '1px solid #FFCDD2' }}>{error}</div>}
+
               <form onSubmit={handleLoginSubmit}>
                 <div style={{ marginBottom: '20px' }}>
                   <label style={{ display: 'block', color: theme.textLight, fontSize: '14px', marginBottom: '8px', fontWeight: '500' }}>Email Address</label>
-                  <input 
-                    type="email" 
+                  <input
+                    type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
@@ -117,11 +202,11 @@ function App() {
                     placeholder="executive@corewealth.com"
                   />
                 </div>
-                
+
                 <div style={{ marginBottom: '20px' }}>
                   <label style={{ display: 'block', color: theme.textLight, fontSize: '14px', marginBottom: '8px', fontWeight: '500' }}>Password</label>
-                  <input 
-                    type="password" 
+                  <input
+                    type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
@@ -138,7 +223,7 @@ function App() {
                   </div>
                 )}
 
-                <button 
+                <button
                   type="submit"
                   style={{ width: '100%', padding: '15px', backgroundColor: theme.darkBrown, color: 'white', border: 'none', borderRadius: '6px', fontSize: '16px', fontWeight: '600', cursor: 'pointer', marginBottom: '24px', transition: 'background-color 0.2s', letterSpacing: '0.5px' }}
                   onMouseOver={(e) => e.target.style.backgroundColor = '#1A100E'}
@@ -154,12 +239,9 @@ function App() {
                 <div style={{ flex: 1, height: '1px', backgroundColor: theme.borderLight }}></div>
               </div>
 
-              <button 
+              <button
                 type="button"
-                onClick={() => {
-                  // // Firebase Google Auth logic goes here
-                  handleLoginSubmit({preventDefault: () => {}});
-                }}
+                onClick={handleLogin}
                 style={{ width: '100%', padding: '14px', backgroundColor: 'white', color: '#444', border: `1px solid ${theme.borderLight}`, borderRadius: '6px', fontSize: '15px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', transition: 'background-color 0.2s' }}
                 onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#F5F5F5'}
                 onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'white'}
@@ -177,8 +259,8 @@ function App() {
             <strong style={{ fontWeight: '700' }}>CORE</strong> WEALTH
           </h1>
           <div>
-            <button 
-              onClick={() => { setAuthMode('signin'); setShowAuthModal(true); }} 
+            <button
+              onClick={() => { setAuthMode('signin'); setShowAuthModal(true); }}
               style={{ background: 'transparent', border: `1px solid ${theme.darkBrown}`, color: theme.darkBrown, padding: '10px 24px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px', letterSpacing: '0.5px', transition: 'all 0.2s', textTransform: 'uppercase' }}
               onMouseOver={(e) => { e.target.style.backgroundColor = theme.darkBrown; e.target.style.color = 'white'; }}
               onMouseOut={(e) => { e.target.style.backgroundColor = 'transparent'; e.target.style.color = theme.darkBrown; }}
@@ -194,8 +276,8 @@ function App() {
           <p style={{ fontSize: '20px', maxWidth: '700px', margin: '0 auto 48px auto', color: '#D7CCC8', lineHeight: '1.6', fontWeight: '300' }}>
             Experience secure, intelligent wealth management with CORE WEALTH. Bank with confidence using our state-of-the-art encrypted platform designed for the modern elite.
           </p>
-          <button 
-            onClick={() => { setAuthMode('signup'); setShowAuthModal(true); }} 
+          <button
+            onClick={() => { setAuthMode('signup'); setShowAuthModal(true); }}
             style={{ backgroundColor: theme.bronze, color: 'white', border: 'none', padding: '18px 48px', fontSize: '18px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 15px rgba(141, 110, 99, 0.3)', letterSpacing: '1px', transition: 'transform 0.2s, backgroundColor 0.2s' }}
             onMouseOver={(e) => { e.target.style.transform = 'scale(1.05)'; }}
             onMouseOut={(e) => { e.target.style.transform = 'scale(1)'; }}
@@ -206,34 +288,34 @@ function App() {
 
         {/* FEATURES SECTION (3-column) */}
         <section style={{ maxWidth: '1200px', margin: '80px auto', padding: '0 20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '40px' }}>
-          
+
           {/* Feature 1: Secure Vault */}
           <div style={{ backgroundColor: theme.cardWhite, padding: '50px 30px', borderRadius: '8px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)', borderTop: `4px solid ${theme.forestGreen}`, textAlign: 'center', transition: 'transform 0.3s' }} onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-10px)'} onMouseOut={(e) => e.currentTarget.style.transform = 'translateY(0)'}>
-             <div style={{ fontSize: '48px', marginBottom: '24px' }}>🛡️</div>
-             <h3 style={{ color: theme.darkBrown, fontSize: '24px', marginBottom: '16px', fontWeight: '600' }}>Secure Vault</h3>
-             <p style={{ color: theme.textLight, lineHeight: '1.6', fontSize: '16px' }}>Your assets are guarded by military-grade encryption and multi-factor authentication, ensuring absolute peace of mind.</p>
+            <div style={{ fontSize: '48px', marginBottom: '24px' }}>🛡️</div>
+            <h3 style={{ color: theme.darkBrown, fontSize: '24px', marginBottom: '16px', fontWeight: '600' }}>Secure Vault</h3>
+            <p style={{ color: theme.textLight, lineHeight: '1.6', fontSize: '16px' }}>Your assets are guarded by military-grade encryption and multi-factor authentication, ensuring absolute peace of mind.</p>
           </div>
 
           {/* Feature 2: Instant Transfers */}
           <div style={{ backgroundColor: theme.cardWhite, padding: '50px 30px', borderRadius: '8px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)', borderTop: `4px solid ${theme.bronze}`, textAlign: 'center', transition: 'transform 0.3s' }} onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-10px)'} onMouseOut={(e) => e.currentTarget.style.transform = 'translateY(0)'}>
-             <div style={{ fontSize: '48px', marginBottom: '24px' }}>⚡</div>
-             <h3 style={{ color: theme.darkBrown, fontSize: '24px', marginBottom: '16px', fontWeight: '600' }}>Instant Transfers</h3>
-             <p style={{ color: theme.textLight, lineHeight: '1.6', fontSize: '16px' }}>Move your money dynamically across borders and accounts with zero latency. Precision meets velocity.</p>
+            <div style={{ fontSize: '48px', marginBottom: '24px' }}>⚡</div>
+            <h3 style={{ color: theme.darkBrown, fontSize: '24px', marginBottom: '16px', fontWeight: '600' }}>Instant Transfers</h3>
+            <p style={{ color: theme.textLight, lineHeight: '1.6', fontSize: '16px' }}>Move your money dynamically across borders and accounts with zero latency. Precision meets velocity.</p>
           </div>
 
           {/* Feature 3: Premium Support */}
           <div style={{ backgroundColor: theme.cardWhite, padding: '50px 30px', borderRadius: '8px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)', borderTop: `4px solid ${theme.darkBrown}`, textAlign: 'center', transition: 'transform 0.3s' }} onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-10px)'} onMouseOut={(e) => e.currentTarget.style.transform = 'translateY(0)'}>
-             <div style={{ fontSize: '48px', marginBottom: '24px' }}>🛎️</div>
-             <h3 style={{ color: theme.darkBrown, fontSize: '24px', marginBottom: '16px', fontWeight: '600' }}>Premium Support</h3>
-             <p style={{ color: theme.textLight, lineHeight: '1.6', fontSize: '16px' }}>Priority access to our dedicated wealth concierges, available 24/7 to assist with your most critical inquiries.</p>
+            <div style={{ fontSize: '48px', marginBottom: '24px' }}>🛎️</div>
+            <h3 style={{ color: theme.darkBrown, fontSize: '24px', marginBottom: '16px', fontWeight: '600' }}>Premium Support</h3>
+            <p style={{ color: theme.textLight, lineHeight: '1.6', fontSize: '16px' }}>Priority access to our dedicated wealth concierges, available 24/7 to assist with your most critical inquiries.</p>
           </div>
-          
+
         </section>
 
         {/* SECTION 1: Strategic Growth (Modified Marketing Section) */}
         <section style={{ backgroundColor: '#F0EBE1', padding: '100px 40px', borderTop: '1px solid #E5E0D8' }}>
           <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-            
+
             {/* Top Row */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '40px', marginBottom: '80px', alignItems: 'flex-start' }}>
               <h2 style={{ flex: '1 1 500px', fontSize: '56px', fontFamily: 'Georgia, serif', fontWeight: '400', margin: 0, color: theme.darkBrown, lineHeight: '1.1', letterSpacing: '-0.5px' }}>
@@ -283,7 +365,7 @@ function App() {
               </button>
             </div>
             <div style={{ flex: '1 1 500px' }}>
-               <img src="/wealth.png" alt="Corporate professional" style={{ width: '100%', borderRadius: '4px', boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }} />
+              <img src="/wealth.png" alt="Corporate professional" style={{ width: '100%', borderRadius: '4px', boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }} />
             </div>
           </div>
         </section>
@@ -295,10 +377,10 @@ function App() {
               The 2026 Core Wealth<br />Intelligence Report
             </h2>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: '1 1 300px' }}>
-               <p style={{ color: '#D0D0D0', fontSize: '18px', margin: '0 0 20px 0' }}>Our comprehensive market analysis and shareholder forecast, released April 2026.</p>
-               <button style={{ backgroundColor: '#A2C5E5', border: 'none', padding: '14px 34px', borderRadius: '30px', fontSize: '16px', fontWeight: '600', color: '#111', cursor: 'pointer', transition: '0.2s' }} onMouseOver={(e) => { e.target.style.backgroundColor = '#89B3D8'; }} onMouseOut={(e) => { e.target.style.backgroundColor = '#A2C5E5'; }}>
-                 Read the prospectus &rarr;
-               </button>
+              <p style={{ color: '#D0D0D0', fontSize: '18px', margin: '0 0 20px 0' }}>Our comprehensive market analysis and shareholder forecast, released April 2026.</p>
+              <button style={{ backgroundColor: '#A2C5E5', border: 'none', padding: '14px 34px', borderRadius: '30px', fontSize: '16px', fontWeight: '600', color: '#111', cursor: 'pointer', transition: '0.2s' }} onMouseOver={(e) => { e.target.style.backgroundColor = '#89B3D8'; }} onMouseOut={(e) => { e.target.style.backgroundColor = '#A2C5E5'; }}>
+                Read the prospectus &rarr;
+              </button>
             </div>
           </div>
         </section>
@@ -316,23 +398,23 @@ function App() {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '40px' }}>
-               <div style={{ borderLeft: '1px solid #E0E0E0', paddingLeft: '30px' }}>
-                 <h3 style={{ fontSize: '26px', color: theme.darkBrown, margin: '0 0 20px 0', fontWeight: '600', letterSpacing: '-0.5px', lineHeight: '1.3' }}>Core Wealth acquires next-gen fintech infrastructure</h3>
-                 <p style={{ fontSize: '16px', color: '#555', margin: '0 0 20px 0', lineHeight: '1.5' }}>Expanding our technological capabilities to offer latency-free global transactions.</p>
-                 <a href="#" style={{ color: '#9A5B3E', textDecoration: 'none', fontWeight: '600', fontSize: '15px' }}>Learn more &rarr;</a>
-               </div>
-               
-               <div style={{ borderLeft: '1px solid #E0E0E0', paddingLeft: '30px' }}>
-                 <h3 style={{ fontSize: '26px', color: theme.darkBrown, margin: '0 0 20px 0', fontWeight: '600', letterSpacing: '-0.5px', lineHeight: '1.3' }}>Global markets outlook: Embracing algorithmic liquidity</h3>
-                 <p style={{ fontSize: '16px', color: '#555', margin: '0 0 20px 0', lineHeight: '1.5' }}>Our quantitative division publishes findings on macroeconomic shifts in the digital asset space.</p>
-                 <a href="#" style={{ color: '#9A5B3E', textDecoration: 'none', fontWeight: '600', fontSize: '15px' }}>Learn more &rarr;</a>
-               </div>
-               
-               <div style={{ borderLeft: '1px solid #E0E0E0', paddingLeft: '30px' }}>
-                 <h3 style={{ fontSize: '26px', color: theme.darkBrown, margin: '0 0 20px 0', fontWeight: '600', letterSpacing: '-0.5px', lineHeight: '1.3' }}>Strategic philanthropic initiative launches in tech hubs</h3>
-                 <p style={{ fontSize: '16px', color: '#555', margin: '0 0 20px 0', lineHeight: '1.5' }}>Committing capital to foster education and innovation in emerging global technology centers.</p>
-                 <a href="#" style={{ color: '#9A5B3E', textDecoration: 'none', fontWeight: '600', fontSize: '15px' }}>Learn more &rarr;</a>
-               </div>
+              <div style={{ borderLeft: '1px solid #E0E0E0', paddingLeft: '30px' }}>
+                <h3 style={{ fontSize: '26px', color: theme.darkBrown, margin: '0 0 20px 0', fontWeight: '600', letterSpacing: '-0.5px', lineHeight: '1.3' }}>Core Wealth acquires next-gen fintech infrastructure</h3>
+                <p style={{ fontSize: '16px', color: '#555', margin: '0 0 20px 0', lineHeight: '1.5' }}>Expanding our technological capabilities to offer latency-free global transactions.</p>
+                <a href="#" style={{ color: '#9A5B3E', textDecoration: 'none', fontWeight: '600', fontSize: '15px' }}>Learn more &rarr;</a>
+              </div>
+
+              <div style={{ borderLeft: '1px solid #E0E0E0', paddingLeft: '30px' }}>
+                <h3 style={{ fontSize: '26px', color: theme.darkBrown, margin: '0 0 20px 0', fontWeight: '600', letterSpacing: '-0.5px', lineHeight: '1.3' }}>Global markets outlook: Embracing algorithmic liquidity</h3>
+                <p style={{ fontSize: '16px', color: '#555', margin: '0 0 20px 0', lineHeight: '1.5' }}>Our quantitative division publishes findings on macroeconomic shifts in the digital asset space.</p>
+                <a href="#" style={{ color: '#9A5B3E', textDecoration: 'none', fontWeight: '600', fontSize: '15px' }}>Learn more &rarr;</a>
+              </div>
+
+              <div style={{ borderLeft: '1px solid #E0E0E0', paddingLeft: '30px' }}>
+                <h3 style={{ fontSize: '26px', color: theme.darkBrown, margin: '0 0 20px 0', fontWeight: '600', letterSpacing: '-0.5px', lineHeight: '1.3' }}>Strategic philanthropic initiative launches in tech hubs</h3>
+                <p style={{ fontSize: '16px', color: '#555', margin: '0 0 20px 0', lineHeight: '1.5' }}>Committing capital to foster education and innovation in emerging global technology centers.</p>
+                <a href="#" style={{ color: '#9A5B3E', textDecoration: 'none', fontWeight: '600', fontSize: '15px' }}>Learn more &rarr;</a>
+              </div>
             </div>
           </div>
         </section>
@@ -345,31 +427,67 @@ function App() {
   // ==========================================
   return (
     <div style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif', backgroundColor: theme.bgWhite, minHeight: '100vh', margin: 0, padding: 0 }}>
-      {/* Define inline keyframes for the pulse animation used in skeleton loader */}
+      {/* PIN Unlock Modal */}
+      {pinModalOpenFor && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(43, 27, 23, 0.85)', zIndex: 2000, display: 'flex', justifyContent: 'center', alignItems: 'center', animation: 'fadeIn 0.2s' }}>
+          <div style={{ backgroundColor: theme.cardWhite, padding: '40px', borderRadius: '12px', width: '100%', maxWidth: '350px', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', position: 'relative' }}>
+            <button
+              onClick={() => { setPinModalOpenFor(null); setPinInput(''); setPinError(''); }}
+              style={{ position: 'absolute', top: '20px', right: '20px', background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: theme.textLight, transition: '0.2s' }}
+              onMouseOver={(e) => e.target.style.color = theme.darkBrown}
+              onMouseOut={(e) => e.target.style.color = theme.textLight}
+            >
+              ✕
+            </button>
+            <h3 style={{ textAlign: 'center', color: theme.darkBrown, marginTop: 0, marginBottom: '10px', fontSize: '22px', fontWeight: '500' }}>Unlock Account</h3>
+            <p style={{ textAlign: 'center', color: theme.textLight, fontSize: '14px', marginBottom: '30px' }}>Enter your 4-digit PIN to securely view balances and history.</p>
+
+            <form onSubmit={handleUnlockSubmit}>
+              {pinError && <div style={{ color: '#D32F2F', fontSize: '13px', marginBottom: '15px', textAlign: 'center' }}>{pinError}</div>}
+              <input
+                type="password"
+                maxLength="4"
+                value={pinInput}
+                onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
+                required
+                style={{ width: '100%', padding: '16px', boxSizing: 'border-box', border: `1px solid ${theme.borderLight}`, borderRadius: '6px', fontSize: '24px', letterSpacing: '10px', textAlign: 'center', outline: 'none', marginBottom: '20px' }}
+                onFocus={(e) => e.target.style.borderColor = theme.darkBrown}
+                onBlur={(e) => e.target.style.borderColor = theme.borderLight}
+                placeholder="••••"
+              />
+              <button
+                type="submit"
+                style={{ width: '100%', padding: '15px', backgroundColor: theme.darkBrown, color: 'white', border: 'none', borderRadius: '6px', fontSize: '16px', fontWeight: '600', cursor: 'pointer', transition: 'background-color 0.2s', letterSpacing: '0.5px' }}
+                onMouseOver={(e) => e.target.style.backgroundColor = '#1A100E'}
+                onMouseOut={(e) => e.target.style.backgroundColor = theme.darkBrown}
+              >
+                Authenticate
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Define inline keyframes */}
       <style>{`
-        @keyframes pulse {
-          0% { opacity: 0.5; }
-          50% { opacity: 0.2; }
-          100% { opacity: 0.5; }
-        }
         @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
-      
+
       {/* 1. TOP NAVIGATION BAR */}
       <nav style={{ backgroundColor: theme.darkBrown, padding: '20px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'white', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-        <h1 
+        <h1
           style={{ margin: 0, fontSize: '24px', letterSpacing: '1px', fontWeight: '300', cursor: 'pointer' }}
-          onClick={() => { setIsLoggedIn(false); setActiveTab('dashboard'); }}
+          onClick={() => { setIsLoggedIn(false); setActiveTab('accounts'); setUnlockedAccounts([]); }}
         >
           <strong style={{ fontWeight: '700' }}>CORE</strong> WEALTH
         </h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
           <div style={{ fontSize: '14px', color: theme.bronze }}>Secure Banking Portal</div>
-          <button 
-            onClick={() => { setIsLoggedIn(false); setActiveTab('dashboard'); setAccountData(null); }}
+          <button
+            onClick={() => { setIsLoggedIn(false); setActiveTab('accounts'); setUnlockedAccounts([]); }}
             style={{ background: 'transparent', border: `1px solid ${theme.bronze}`, color: theme.bronze, padding: '6px 16px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', transition: '0.2s', textTransform: 'uppercase', letterSpacing: '0.5px' }}
             onMouseOver={(e) => { e.target.style.backgroundColor = theme.bronze; e.target.style.color = 'white'; }}
             onMouseOut={(e) => { e.target.style.backgroundColor = 'transparent'; e.target.style.color = theme.bronze; }}
@@ -380,99 +498,118 @@ function App() {
       </nav>
 
       {/* 2. AXIS-STYLE SUB-MENU (The Tab Switcher) */}
-      <div style={{ backgroundColor: theme.cardWhite, borderBottom: '1px solid #E0E0E0', display: 'flex', justifyContent: 'center', gap: '30px', padding: '15px 0', position: 'sticky', top: 0, zIndex: 100 }}>
-        {['dashboard', 'transact', 'transfer', 'open account'].map((tab) => (
+      <div style={{ backgroundColor: theme.cardWhite, borderBottom: '1px solid #E0E0E0', display: 'flex', justifyContent: 'center', gap: '40px', padding: '15px 0', position: 'sticky', top: 0, zIndex: 100 }}>
+        {['accounts', 'transact & transfer', 'loans'].map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
             style={{
-              background: 'none', border: 'none', fontSize: '16px', fontWeight: activeTab === tab ? 'bold' : 'normal',
-              color: activeTab === tab ? theme.darkBrown : theme.textLight, cursor: 'pointer', textTransform: 'capitalize',
-              borderBottom: activeTab === tab ? `3px solid ${theme.darkBrown}` : '3px solid transparent', paddingBottom: '5px', transition: 'all 0.2s'
+              background: 'none', border: 'none', fontSize: '15px', fontWeight: activeTab === tab ? '600' : '400',
+              color: activeTab === tab ? theme.darkBrown : theme.textLight, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '1px',
+              borderBottom: activeTab === tab ? `3px solid ${theme.darkBrown}` : '3px solid transparent', paddingBottom: '8px', transition: 'all 0.2s'
             }}
           >
-            {tab === 'dashboard' ? 'Overview' : tab}
+            {tab}
           </button>
         ))}
       </div>
 
       {/* 3. MAIN CONTENT AREA */}
-      <main style={{ maxWidth: '800px', margin: '40px auto', padding: '0 20px' }}>
+      <main style={{ maxWidth: '900px', margin: '50px auto', padding: '0 20px' }}>
 
-        {/* --- TAB: DASHBOARD (Read) --- */}
-        {activeTab === 'dashboard' && (
+        {/* --- TAB: ACCOUNTS --- */}
+        {activeTab === 'accounts' && (
           <div style={{ animation: 'fadeIn 0.5s' }}>
-            <h2 style={{ color: theme.darkBrown, fontWeight: '300', marginBottom: '30px' }}>Account Overview</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '30px' }}>
+              <h2 style={{ color: theme.darkBrown, fontWeight: '300', margin: 0, fontSize: '32px' }}>Your Portfolio</h2>
+              <span style={{ color: theme.textLight, fontSize: '14px' }}>{accountData ? accountData.length : 0} Accounts Found</span>
+            </div>
 
-            {/* Error Handling */}
-            {error && <div style={{ padding: '15px', backgroundColor: '#ffebee', color: '#c62828', borderRadius: '4px', marginBottom: '20px', borderLeft: '4px solid #c62828' }}>{error}</div>}
+            <div style={{ display: 'grid', gap: '24px' }}>
+              {accountData && accountData.map((account, index) => {
+                const isUnlocked = unlockedAccounts.includes(account.acc_num);
 
-            {/* LOADING STATE - SKELETON LOADER */}
-            {isLoading && !error && (
-              <div style={{ backgroundColor: theme.cardWhite, padding: '40px', borderRadius: '8px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)', borderTop: `4px solid ${theme.bronze}`, animation: 'pulse 1.5s infinite ease-in-out' }}>
-                <div style={{ height: '12px', width: '90px', backgroundColor: theme.borderLight, borderRadius: '4px', marginBottom: '10px' }}></div>
-                <div style={{ height: '32px', width: '220px', backgroundColor: theme.borderLight, borderRadius: '4px', marginBottom: '30px' }}></div>
-                
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '1px solid #f0f0f0', paddingBottom: '20px' }}>
-                  <div>
-                    <div style={{ height: '14px', width: '110px', backgroundColor: theme.borderLight, borderRadius: '4px', marginBottom: '8px' }}></div>
-                    <div style={{ height: '42px', width: '160px', backgroundColor: theme.borderLight, borderRadius: '4px' }}></div>
+                return (
+                  <div key={account.acc_num} style={{ backgroundColor: theme.cardWhite, border: `1px solid ${theme.borderLight}`, borderRadius: '8px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', overflow: 'hidden', transition: 'all 0.3s' }}>
+                    {/* Header (Public) */}
+                    <div style={{ padding: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: isUnlocked ? `1px solid ${theme.borderLight}` : 'none' }}>
+                      <div>
+                        <div style={{ fontSize: '12px', color: theme.textLight, textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '8px', fontWeight: 'bold' }}>{account.account_type || "ACCOUNT"}</div>
+                        <h3 style={{ margin: '0 0 5px 0', color: theme.darkBrown, fontSize: '24px', fontWeight: '500' }}>{account.username}</h3>
+                        <div style={{ color: '#666', fontFamily: 'monospace', fontSize: '16px', letterSpacing: '1px' }}>•••• {String(account.acc_num).slice(-4)}</div>
+                      </div>
+
+                      {!isUnlocked ? (
+                        <button
+                          onClick={() => setPinModalOpenFor(account.acc_num)}
+                          style={{ backgroundColor: 'transparent', border: `1px solid ${theme.bronze}`, color: theme.darkBrown, padding: '12px 24px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', fontWeight: '600', transition: 'all 0.2s' }}
+                          onMouseOver={(e) => { e.currentTarget.style.backgroundColor = theme.bronze; e.currentTarget.style.color = 'white'; }}
+                          onMouseOut={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = theme.darkBrown; }}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6zm9 14H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z" /></svg>
+                          View Balance & History
+                        </button>
+                      ) : (
+                        <div style={{ textAlign: 'right' }}>
+                          <p style={{ color: theme.textLight, margin: '0 0 5px 0', fontSize: '14px' }}>Available Balance</p>
+                          <h2 style={{ margin: 0, color: theme.forestGreen, fontSize: '36px', fontWeight: '300' }}>₹{account.balance ? account.balance.toLocaleString() : 0}</h2>
+                          <button
+                            onClick={() => handleLockAccount(account.acc_num)}
+                            style={{ background: 'none', border: 'none', color: theme.textLight, fontSize: '12px', cursor: 'pointer', textDecoration: 'underline', marginTop: '10px', padding: 0 }}
+                          >
+                            Lock Account
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Expanded History View (Private) */}
+                    {isUnlocked && (
+                      <div style={{ backgroundColor: '#FAFAFA', padding: '30px', animation: 'fadeIn 0.4s' }}>
+                        <h4 style={{ color: theme.darkBrown, marginTop: 0, marginBottom: '20px', fontSize: '16px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>Recent Transactions</h4>
+
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                          <tbody>
+                            {account.transactions && account.transactions.length > 0 ? account.transactions.map((tx, idx) => (
+                              <tr key={tx.id || idx} style={{ borderBottom: idx !== account.transactions.length - 1 ? `1px solid ${theme.borderLight}` : 'none' }}>
+                                <td style={{ padding: '16px 0', color: theme.textLight, width: '120px' }}>{tx.date || "N/A"}</td>
+                                <td style={{ padding: '16px 0', color: theme.darkBrown, fontWeight: '500' }}>{tx.desc || "Transaction"}</td>
+                                <td style={{ padding: '16px 0', textAlign: 'right', color: tx.amount > 0 ? theme.forestGreen : theme.darkBrown, fontWeight: '600' }}>
+                                  {tx.amount > 0 ? '+' : ''}{tx.amount ? tx.amount.toLocaleString() : "0"}
+                                </td>
+                              </tr>
+                            )) : (
+                              <tr>
+                                <td colSpan="3" style={{ padding: '16px 0', color: theme.textLight, textAlign: 'center' }}>No recent transaction history recorded.</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
-                  <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                    <div style={{ height: '14px', width: '130px', backgroundColor: theme.borderLight, borderRadius: '4px', marginBottom: '10px' }}></div>
-                    <div style={{ height: '14px', width: '90px', backgroundColor: theme.borderLight, borderRadius: '4px' }}></div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* FETCHED DATA VIEW */}
-            {!isLoading && accountData && (
-              <div style={{ backgroundColor: theme.cardWhite, padding: '40px', borderRadius: '8px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)', borderTop: `4px solid ${theme.bronze}`, animation: 'fadeIn 0.5s' }}>
-                <p style={{ color: theme.textLight, textTransform: 'uppercase', letterSpacing: '1px', fontSize: '12px', margin: 0 }}>Welcome back</p>
-                <h1 style={{ color: theme.darkBrown, margin: '5px 0 20px 0', fontSize: '32px' }}>{accountData.username}</h1>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '1px solid #eee', paddingBottom: '20px' }}>
-                  <div>
-                    <p style={{ color: theme.textLight, margin: 0, fontSize: '14px' }}>Available Balance</p>
-                    <h2 style={{ margin: 0, color: theme.forestGreen, fontSize: '42px', fontWeight: '300' }}>₹{accountData.balance.toLocaleString()}</h2>
-                  </div>
-                  <div style={{ textAlign: 'right', color: theme.textLight, fontSize: '14px' }}>
-                    <p style={{ margin: '0 0 5px 0' }}>Type: <strong>{accountData.account_type || "SAVINGS"}</strong></p>
-                    <p style={{ margin: 0 }}>Interest: <strong>{accountData.interestRate}%</strong></p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* --- TAB: TRANSACT (Update) --- */}
-        {activeTab === 'transact' && (
-          <div>
-            <h2 style={{ color: theme.darkBrown, fontWeight: '300' }}>Deposit & Withdrawal</h2>
-            <div style={{ backgroundColor: theme.cardWhite, padding: '40px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-              <p style={{ color: theme.textLight }}>UI for PUT /transaction endpoint will go here.</p>
+                );
+              })}
             </div>
           </div>
         )}
 
-        {/* --- TAB: TRANSFER (Post) --- */}
-        {activeTab === 'transfer' && (
-          <div>
-            <h2 style={{ color: theme.darkBrown, fontWeight: '300' }}>Wire Transfer</h2>
-            <div style={{ backgroundColor: theme.cardWhite, padding: '40px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-              <p style={{ color: theme.textLight }}>UI for POST /transfer endpoint will go here.</p>
+        {/* --- TAB: TRANSACT & TRANSFER --- */}
+        {activeTab === 'transact & transfer' && (
+          <div style={{ animation: 'fadeIn 0.5s' }}>
+            <h2 style={{ color: theme.darkBrown, fontWeight: '300', marginBottom: '30px', fontSize: '32px' }}>Move Capital</h2>
+            <div style={{ backgroundColor: theme.cardWhite, padding: '40px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', borderTop: `4px solid ${theme.bronze}` }}>
+              <p style={{ color: theme.textLight, margin: 0 }}>UI for Withdrawals, Deposits, and Wire Transfers will go here.</p>
             </div>
           </div>
         )}
 
-        {/* --- TAB: OPEN ACCOUNT (Create) --- */}
-        {activeTab === 'open account' && (
-          <div>
-            <h2 style={{ color: theme.darkBrown, fontWeight: '300' }}>Open New Account</h2>
-            <div style={{ backgroundColor: theme.cardWhite, padding: '40px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-              <p style={{ color: theme.textLight }}>UI for POST /create endpoint will go here.</p>
+        {/* --- TAB: LOANS --- */}
+        {activeTab === 'loans' && (
+          <div style={{ animation: 'fadeIn 0.5s' }}>
+            <h2 style={{ color: theme.darkBrown, fontWeight: '300', marginBottom: '30px', fontSize: '32px' }}>Credit & Lending</h2>
+            <div style={{ backgroundColor: theme.cardWhite, padding: '40px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', borderTop: `4px solid ${theme.darkBrown}` }}>
+              <p style={{ color: theme.textLight, margin: 0 }}>UI for loan applications and active credit lines will go here.</p>
             </div>
           </div>
         )}

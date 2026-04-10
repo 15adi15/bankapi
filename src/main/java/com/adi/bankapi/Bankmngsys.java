@@ -59,6 +59,8 @@ abstract class Accounts {
     protected String username;
     private final int acc_num;
     protected double balance;// Protected so that it can be accessed by subclasses only.
+    protected String email;
+    protected String account_type;
     @JsonIgnore
     private String hashed_pin;
     // A hash set to ensure uniqueness accross all the instances of account number.
@@ -71,19 +73,21 @@ abstract class Accounts {
     protected abstract boolean checkTransactionLimit(int amount);
 
     // Constructor to create an Account.
-    public Accounts(String username, int acc_pin, double balance) {
+    public Accounts(String username, int acc_pin, double balance, String email) {
         this.username = username;
         this.hashed_pin = hashPin(String.valueOf(acc_pin));
         this.balance = balance;
         this.acc_num = generateUniqueAccountNumber();
+        this.email = email;
     }
 
     // DataBase Constructor
-    protected Accounts(int acc_num, String username, String hashed_pin, double balance) {
+    protected Accounts(int acc_num, String username, String hashed_pin, double balance, String email) {
         this.acc_num = acc_num;
         this.username = username;
         this.hashed_pin = hashed_pin;
         this.balance = balance;
+        this.email = email;
     }
 
     public int getaccnum() {
@@ -100,6 +104,14 @@ abstract class Accounts {
 
     public double getBalance() {
         return balance;
+    }
+
+    public String getemail() {
+        return email;
+    }
+
+    public String getaccount_type() {
+        return account_type;
     }
 
     // System will generate new account numbers each time
@@ -193,15 +205,16 @@ class Saving_acc extends Accounts {
     private final int DAILY_WITHDRAWAL_LIMIT = 50000;
 
     // Constructor that is invoked when a new account of saving type is created.
-    public Saving_acc(String username, int pin, double balance, double interestRate) {
-        super(username, pin, balance);
+    public Saving_acc(String username, int pin, double balance, double interestRate, String email) {
+        super(username, pin, balance, email);
         this.interestRate = interestRate;
     }
 
     // DataBase Constructor that is invoked when details of existing account is
     // fecthed.
-    public Saving_acc(int acc_num, String username, String hashed_pin, double balance, double interestRate) {
-        super(acc_num, username, hashed_pin, balance); // Calls the parent DB constructor
+    public Saving_acc(int acc_num, String username, String hashed_pin, double balance, double interestRate,
+            String email) {
+        super(acc_num, username, hashed_pin, balance, email); // Calls the parent DB constructor
         this.interestRate = interestRate;
     }
 
@@ -225,9 +238,9 @@ class Credit_acc extends Accounts {
     private final int MAX_SWIPE_LIMIT; // Specific constraint for credit accounts
 
     // Constructor
-    public Credit_acc(String username, int pin, double balance, double interestRate, int maxSwipeLimit) {
+    public Credit_acc(String username, int pin, double balance, double interestRate, int maxSwipeLimit, String email) {
         // 1. super() calls the constructor of the parent 'Accounts' class
-        super(username, pin, balance);
+        super(username, pin, balance, email);
         this.interestRate = interestRate;
         this.MAX_SWIPE_LIMIT = maxSwipeLimit;
 
@@ -237,8 +250,8 @@ class Credit_acc extends Accounts {
 
     // DATABASE CONSTRUCTOR for Savings
     public Credit_acc(int acc_num, String username, String hashed_pin, double balance, double interestRate,
-            int MAX_SWIPE_LIMIT) {
-        super(acc_num, username, hashed_pin, balance); // Calls the parent DB constructor
+            int MAX_SWIPE_LIMIT, String email) {
+        super(acc_num, username, hashed_pin, balance, email); // Calls the parent DB constructor
         this.interestRate = interestRate;
         this.MAX_SWIPE_LIMIT = MAX_SWIPE_LIMIT;
     }

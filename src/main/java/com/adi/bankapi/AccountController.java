@@ -1,5 +1,6 @@
 package com.adi.bankapi;
 
+//THE ACCOUNT CONTROLLER CLASS IS THE ENTRY POINT FOR ANY HTTP REQUEST.
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -21,6 +22,7 @@ public class AccountController {
         public int pin;
         public double balance;
         public String accountType;// Savings or Credit
+        public String email;
     }
 
     // The POST method
@@ -32,9 +34,11 @@ public class AccountController {
         // check the fields
         if ("SAVINGS".equalsIgnoreCase(requestData.accountType)) {
             // pass to saving acc constructor
-            newAccount = new Saving_acc(requestData.username, requestData.pin, requestData.balance, 4.5);
+            newAccount = new Saving_acc(requestData.username, requestData.pin, requestData.balance, 4.5,
+                    requestData.email);
         } else if ("CREDIT".equalsIgnoreCase(requestData.accountType)) {
-            newAccount = new Credit_acc(requestData.username, requestData.pin, requestData.balance, 18.5, 100000);
+            newAccount = new Credit_acc(requestData.username, requestData.pin, requestData.balance, 18.5, 100000,
+                    requestData.email);
         } else {
             return "Error: Invalid Account Type. Must be SAVINGS or CREDIT";
         }
@@ -104,5 +108,26 @@ public class AccountController {
             return "Transaction Failed! " + e.getMessage();
         }
 
+    }
+
+    // The Login DTO
+    public static class LoginDTO {
+        public String email;
+    }
+
+    // The AUTH SYNC endpoint.
+    @PostMapping("/auth/sync")
+    public Object syncUser(@RequestBody LoginDTO loginData) {
+        // Search the database for the Firebase email
+        Accounts existingAccount = accountDAO.getAccountByEmail(loginData.email);
+
+        if (existingAccount != null) {
+            // User exists! Send their entire dashboard data back to React.
+            return existingAccount;
+        } else {
+            // User logged in with Google, but hasn't opened a bank account yet.
+            // Return an error so React knows to redirect them to the "Open Account" screen.
+            return "NO_ACCOUNT_FOUND";
+        }
     }
 }

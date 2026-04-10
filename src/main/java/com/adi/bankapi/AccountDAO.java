@@ -1,15 +1,17 @@
 package com.adi.bankapi;
 
+//THE ACCOUNT DAO CLASS TALKS TO THE DATABASE.
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.Map;
 import java.sql.ResultSet;
 
 class AccountDAO {
     // Inseritng into data base
     public void saveAccount(Accounts account) {// takes any type of "Account" object as input.
 
-        String sql = "INSERT INTO accounts (acc_num, username, hashed_pin, balance, account_type, interest_rate, transaction_limit) VALUES(?,?,?,?,?,?,?)";
+        String sql = "INSERT INTO accounts (acc_num, username, hashed_pin, balance, account_type, interest_rate, transaction_limit,email) VALUES(?,?,?,?,?,?,?,?)";
 
         // to close the connection and statement when work is done
         try (Connection conn = DatabaseConnection.getConnection();
@@ -18,6 +20,16 @@ class AccountDAO {
             pstmt.setString(2, account.getUsername());
             pstmt.setString(3, account.getHashedPin());
             pstmt.setDouble(4, account.getBalance());
+            pstmt.setString(5, account.getaccount_type());
+            // Map the specific subclass variables to 6 and 7
+            if (account instanceof Saving_acc) {
+                pstmt.setDouble(6, ((Saving_acc) account).getInterestRate());
+                pstmt.setNull(7, java.sql.Types.INTEGER); // Savings have no swipe limit
+            } else if (account instanceof Credit_acc) {
+                pstmt.setDouble(6, ((Credit_acc) account).getInterestRate());
+                pstmt.setInt(7, ((Credit_acc) account).getMaxSwipeLimit());
+            }
+            pstmt.setString(8, account.getemail());
 
             if (account instanceof Saving_acc) {
                 pstmt.setString(5, "SAVINGS");
@@ -40,7 +52,40 @@ class AccountDAO {
         }
     }
 
-    // fecthing from database
+    // fetching account by email.
+    // 3. Fetch by Email (The Firebase Bridge)
+    public Accounts getAccountByEmail(String email) {
+        String sql = "SELECT * FROM accounts WHERE email = ?";
+        Accounts fetchedAccount = null;
+
+        try (Connection conn = DatabaseConnection.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, email);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    int dbAccNum = rs.getInt("acc_num");
+                    String dbUsername = rs.getString("username");
+                    String dbHashedPin = rs.getString("hashed_pin");
+                    double dbBalance = rs.getDouble("balance");
+                    String type = rs.getString("account_type");
+
+                    if ("SAVINGS".equals(type)) {
+                        fetchedAccount = new Saving_acc(dbAccNum, dbUsername, dbHashedPin, dbBalance, dbBalance, email);
+                    } else if ("CREDIT".equals(type)) {
+                        fetchedAccount = new Credit_acc(dbAccNum, dbUsername, dbHashedPin, dbBalance, dbBalance,
+                                dbAccNum, email);
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Database error: " + e.getMessage());
+        }
+        return fetchedAccount;
+    }
+
+    // fecthing from database using account number.
     public Accounts getAccountByAccnum(int accNum) {
         // We select the specific columns we need
         String sql = "SELECT * FROM accounts WHERE acc_num = ?";
@@ -64,10 +109,12 @@ class AccountDAO {
                     // Constructor
                     if ("SAVINGS".equals(type)) {
                         double dbInterestRate = rs.getDouble("interest_rate");
-                        fetchedAccount = new Saving_acc(dbAccNum, dbUsername, dbHashedPin, dbBalance, dbInterestRate);
+                        fetchedAccount = new Saving_acc(dbAccNum, dbUsername, dbHashedPin, dbBalance, dbInterestRate,
+                                type);
                     } else if ("CREDIT".equals(type)) {
                         double dbInterestRate = rs.getDouble("interest_rate");
-                        fetchedAccount = new Credit_acc(dbUsername, dbAccNum, dbBalance, dbInterestRate, dbAccNum);
+                        fetchedAccount = new Credit_acc(accNum, dbUsername, dbHashedPin, dbBalance, dbInterestRate,
+                                dbAccNum, type);
                     }
                 }
             }
