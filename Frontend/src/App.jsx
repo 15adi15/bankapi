@@ -34,6 +34,39 @@ function App() {
   const [txStatus, setTxStatus] = useState(null); // null, 'processing', 'success', 'error'
   const [txMessage, setTxMessage] = useState('');
 
+  // --- PERSISTENT SESSION ON REFRESH ---
+  useEffect(() => {
+    const savedEmail = localStorage.getItem('coreWealthEmail');
+    if (savedEmail) {
+      setEmail(savedEmail);
+      autoConnect(savedEmail);
+    }
+  }, []);
+
+  const autoConnect = async (savedEmail) => {
+    try {
+      const response = await fetch('http://localhost:8080/api/accounts/auth/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: savedEmail })
+      });
+      const rawText = await response.text();
+      let data;
+      try { data = JSON.parse(rawText); } catch (e) { data = rawText; }
+
+      if (data === "NO_ACCOUNT_FOUND" || data.status === "NO_ACCOUNT_FOUND") {
+        setAccountData([]);
+      } else if (Array.isArray(data)) {
+        setAccountData(data);
+      } else {
+        setAccountData([data]);
+      }
+      setIsLoggedIn(true);
+    } catch (err) {
+      console.log("Auto-login failed:", err);
+    }
+  };
+
   // --- THE AUTH SYNC HANDSHAKE ---
   const handleLogin = async () => {
     setError('');
@@ -42,7 +75,8 @@ function App() {
       // 1. Talk to Google
       const result = await logInWithGoogle();
       const userEmail = result.user.email;
-      setEmail(userEmail); // Preserve the email in state for future account creation!
+      setEmail(userEmail); 
+      localStorage.setItem('coreWealthEmail', userEmail); // Save to browser cache
       console.log("Firebase authenticated email:", userEmail);
 
       // 2. Talk to Spring Boot
@@ -179,6 +213,7 @@ function App() {
         setAccountData([data]);
       }
 
+      localStorage.setItem('coreWealthEmail', email); // Save dummy email
       setShowAuthModal(false);
       setIsLoggedIn(true);
       setActiveTab('accounts');
@@ -668,14 +703,14 @@ function App() {
       <nav style={{ backgroundColor: theme.darkBrown, padding: '20px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'white', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
         <h1
           style={{ margin: 0, fontSize: '24px', letterSpacing: '1px', fontWeight: '300', cursor: 'pointer' }}
-          onClick={() => { setIsLoggedIn(false); setActiveTab('accounts'); setUnlockedAccounts([]); }}
+          onClick={() => { localStorage.removeItem('coreWealthEmail'); setIsLoggedIn(false); setActiveTab('accounts'); setUnlockedAccounts([]); }}
         >
           <strong style={{ fontWeight: '700' }}>CORE</strong> WEALTH
         </h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
           <div style={{ fontSize: '14px', color: theme.bronze }}>Secure Banking Portal</div>
           <button
-            onClick={() => { setIsLoggedIn(false); setActiveTab('accounts'); setUnlockedAccounts([]); }}
+            onClick={() => { localStorage.removeItem('coreWealthEmail'); setIsLoggedIn(false); setActiveTab('accounts'); setUnlockedAccounts([]); }}
             style={{ background: 'transparent', border: `1px solid ${theme.bronze}`, color: theme.bronze, padding: '6px 16px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', transition: '0.2s', textTransform: 'uppercase', letterSpacing: '0.5px' }}
             onMouseOver={(e) => { e.target.style.backgroundColor = theme.bronze; e.target.style.color = 'white'; }}
             onMouseOut={(e) => { e.target.style.backgroundColor = 'transparent'; e.target.style.color = theme.bronze; }}
