@@ -295,7 +295,7 @@ class Transaction {
         this.balance_after = balance_after;
         this.timestamp = LocalDateTime.now();
     }
-    
+
     // OVERLOADED CONSTRUCTOR for DB retrieval
     public Transaction(int id, String type, double amount, double balance_after, LocalDateTime timestamp) {
         this.id = id;
@@ -306,10 +306,21 @@ class Transaction {
     }
 
     // --- JACKSON GETTERS ---
-    public int getId() { return id; }
-    public String getType() { return type; }
-    public double getAmount() { return amount; }
-    public double getBalance_after() { return balance_after; }
+    public int getId() {
+        return id;
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public double getAmount() {
+        return amount;
+    }
+
+    public double getBalance_after() {
+        return balance_after;
+    }
 
     public LocalDateTime getTimestamp() {
         return timestamp;
@@ -332,8 +343,8 @@ abstract class Loan {
     protected double interest_rate;
     protected double principle_amount;
     protected int tenure;// in monthes or years.
-    // Constructor for creating a Loan Object.
 
+    // Constructor for creating a Loan Object.
     public Loan(String borrower_name, double interest_rate, double principle_amount, int tenure) {
         this.borrower_name = borrower_name;
         this.interest_rate = interest_rate;

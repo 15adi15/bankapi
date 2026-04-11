@@ -843,23 +843,82 @@ function App() {
               </button>
             </div>
 
-            {/* WIDGET 2: Locked Allocation Chart */}
+            {/* WIDGET 2: Dynamic Allocation Chart */}
             <div style={{ backgroundColor: theme.cardWhite, padding: '24px', borderRadius: '8px', border: `1px solid ${theme.borderLight}`, boxShadow: '0 4px 15px rgba(0,0,0,0.02)', position: 'relative' }}>
               <h4 style={{ color: theme.darkBrown, margin: '0 0 10px 0', fontSize: '16px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>Asset Allocation</h4>
               <p style={{ color: theme.textLight, fontSize: '13px', margin: '0 0 20px 0' }}>Overall Portfolio Distribution</p>
               
               <div style={{ position: 'relative', width: '180px', height: '180px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {/* CSS Conic Gradient to mock a Donut Chart perfectly */}
-                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: '50%', background: `conic-gradient(${theme.forestGreen} 0% 35%, ${theme.bronze} 35% 60%, ${theme.darkBrown} 60% 100%)`, filter: 'blur(5px)', opacity: 0.8, WebkitMaskImage: 'radial-gradient(circle, transparent 55%, black 56%)', maskImage: 'radial-gradient(circle, transparent 55%, black 56%)' }}></div>
-                
-                {/* Secure Lock Overlay Overlay */}
-                <div style={{ position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <div style={{ backgroundColor: 'rgba(255,255,255,0.95)', padding: '12px', borderRadius: '50%', marginBottom: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill={theme.darkBrown}><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6zm9 14H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/></svg>
-                  </div>
-                  <span style={{ fontSize: '11px', fontWeight: 'bold', color: theme.darkBrown, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Unlock Accounts</span>
-                </div>
+                {(() => {
+                   const unlockedAccs = accountData.filter(acc => unlockedAccounts.includes(acc.accnum));
+                   const hasData = unlockedAccs.length > 0;
+                   let gradientString = `conic-gradient(${theme.forestGreen} 0% 35%, ${theme.bronze} 35% 60%, ${theme.darkBrown} 60% 100%)`;
+                   let centerContent = (
+                     <div style={{ position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                       <div style={{ backgroundColor: 'rgba(255,255,255,0.95)', padding: '12px', borderRadius: '50%', marginBottom: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                         <svg width="20" height="20" viewBox="0 0 24 24" fill={theme.darkBrown}><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6zm9 14H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/></svg>
+                       </div>
+                       <span style={{ fontSize: '11px', fontWeight: 'bold', color: theme.darkBrown, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Unlock Accounts</span>
+                     </div>
+                   );
+
+                   if (hasData) {
+                     const totalBalance = unlockedAccs.reduce((sum, acc) => sum + (acc.balance || 0), 0);
+                     if (totalBalance > 0) {
+                        let currentPercent = 0;
+                        const stops = unlockedAccs.map((acc, idx) => {
+                            const slicePercent = (acc.balance / totalBalance) * 100;
+                            const start = currentPercent;
+                            currentPercent += slicePercent;
+                            const end = currentPercent;
+                            const colorType = (acc.account_type || acc.type || 'SAVINGS').toUpperCase();
+                            const color = colorType === 'SAVINGS' ? theme.forestGreen : theme.darkBrown;
+                            // Add slight styling variation if multiple of same type touch
+                            const filterColor = (idx % 2 === 0) ? color : `${color}E6`; 
+                            // Add 0.5% white gap between slices for visibility
+                            return `${filterColor} ${start}% calc(${end}% - 0.5%), #ffffff calc(${end}% - 0.5%) ${end}%`;
+                        }).join(', ');
+                        gradientString = `conic-gradient(${stops})`;
+                     } else {
+                        // Empty balances but unlocked
+                        gradientString = `conic-gradient(#E0E0E0 0% 100%)`;
+                     }
+
+                     centerContent = (
+                       <div style={{ position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                          <span style={{ fontSize: '11px', fontWeight: 'bold', color: theme.textLight, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Assets</span>
+                          <span style={{ fontSize: '16px', fontWeight: 'bold', color: theme.darkBrown }}>₹{unlockedAccs.reduce((s, a) => s + a.balance, 0).toLocaleString()}</span>
+                       </div>
+                     );
+                   }
+
+                   return (
+                     <>
+                        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: '50%', background: gradientString, filter: hasData ? 'none' : 'blur(5px)', opacity: hasData ? 1 : 0.8, WebkitMaskImage: 'radial-gradient(circle, transparent 55%, black 56%)', maskImage: 'radial-gradient(circle, transparent 55%, black 56%)', transition: 'all 0.5s ease-in-out' }}></div>
+                        {centerContent}
+                     </>
+                   );
+                })()}
               </div>
+              
+              {/* Legend for Unlocked Accounts */}
+              {unlockedAccounts.length > 0 && (
+                <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {accountData.filter(acc => unlockedAccounts.includes(acc.accnum)).map((acc, idx) => {
+                    const colorType = (acc.account_type || acc.type || 'SAVINGS').toUpperCase();
+                    const color = colorType === 'SAVINGS' ? theme.forestGreen : theme.darkBrown;
+                    return (
+                      <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: color }}></div>
+                          <span style={{ fontSize: '12px', color: theme.textLight }}>...{String(acc.accnum).slice(-4)}</span>
+                        </div>
+                        <span style={{ fontSize: '12px', fontWeight: '600', color: theme.darkBrown }}>₹{acc.balance.toLocaleString()}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* WIDGET 3: Market Intelligence */}
