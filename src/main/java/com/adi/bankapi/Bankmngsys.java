@@ -114,6 +114,10 @@ abstract class Accounts {
         return this.account_type;
     }
 
+    public List<Transaction> getTransactions() {
+        return this.transactions;
+    }
+
     // System will generate new account numbers each time
     private int generateUniqueAccountNumber() {
         Random num = new Random();// built in function to generate random numbers
@@ -279,6 +283,7 @@ class Credit_acc extends Accounts {
 }
 
 class Transaction {
+    private int id; // Added transaction ID
     private String type;
     private double amount;
     private double balance_after;
@@ -290,9 +295,29 @@ class Transaction {
         this.balance_after = balance_after;
         this.timestamp = LocalDateTime.now();
     }
+    
+    // OVERLOADED CONSTRUCTOR for DB retrieval
+    public Transaction(int id, String type, double amount, double balance_after, LocalDateTime timestamp) {
+        this.id = id;
+        this.type = type;
+        this.amount = amount;
+        this.balance_after = balance_after;
+        this.timestamp = timestamp;
+    }
+
+    // --- JACKSON GETTERS ---
+    public int getId() { return id; }
+    public String getType() { return type; }
+    public double getAmount() { return amount; }
+    public double getBalance_after() { return balance_after; }
 
     public LocalDateTime getTimestamp() {
         return timestamp;
+    }
+
+    // Additional Date String specifically for React UI
+    public String getDate() {
+        return timestamp.toLocalDate().toString();
     }
 
     @Override

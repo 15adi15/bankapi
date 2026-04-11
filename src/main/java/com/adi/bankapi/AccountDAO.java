@@ -75,14 +75,16 @@ class AccountDAO {
 
                     if ("SAVINGS".equals(type)) {
                         double dbInterestRate = rs.getDouble("interest_rate");
-                        accountList.add(new Saving_acc(dbAccNum, dbUsername, dbHashedPin, dbBalance, dbInterestRate,
-                                email));
+                        Saving_acc acc = new Saving_acc(dbAccNum, dbUsername, dbHashedPin, dbBalance, dbInterestRate, email);
+                        loadTransactions(acc);
+                        accountList.add(acc);
 
                     } else if ("CREDIT".equals(type)) {
                         double dbInterestRate = rs.getDouble("interest_rate");
                         int dbLimit = rs.getInt("transaction_limit");
-                        accountList.add(new Credit_acc(dbAccNum, dbUsername, dbHashedPin, dbBalance, dbInterestRate,
-                                dbLimit, email));
+                        Credit_acc acc = new Credit_acc(dbAccNum, dbUsername, dbHashedPin, dbBalance, dbInterestRate, dbLimit, email);
+                        loadTransactions(acc);
+                        accountList.add(acc);
                     }
                 }
             }
@@ -154,6 +156,9 @@ class AccountDAO {
                         fetchedAccount = new Credit_acc(accNum, dbUsername, dbHashedPin, dbBalance, dbInterestRate,
                                 dbAccNum, type);
                     }
+                    if (fetchedAccount != null) {
+                        loadTransactions(fetchedAccount);
+                    }
                 }
             }
         } catch (SQLException e) {
@@ -179,6 +184,43 @@ class AccountDAO {
             }
         } catch (SQLException e) {
             e.printStackTrace();
+        }
+    }
+
+    // --- TRANSACTION HISTORY MGMT ---
+    public void loadTransactions(Accounts account) {
+        String sql = "SELECT * FROM transactions WHERE acc_num = ? ORDER BY created_at DESC LIMIT 10";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, account.getAccnum());
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    int id = rs.getInt("transaction_id");
+                    String type = rs.getString("transaction_type");
+                    double amount = rs.getDouble("amount");
+                    double balance_after = rs.getDouble("balance_after");
+                    java.sql.Timestamp ts = rs.getTimestamp("created_at");
+                    if (ts != null) {
+                        account.transactions.add(new Transaction(id, type, amount, balance_after, ts.toLocalDateTime()));
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Database error loading transactions: " + e.getMessage());
+        }
+    }
+
+    public void saveTransaction(int accNum, String type, double amount, double balanceAfter) {
+        String sql = "INSERT INTO transactions (acc_num, transaction_type, amount, balance_after, created_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, accNum);
+            pstmt.setString(2, type);
+            pstmt.setDouble(3, amount);
+            pstmt.setDouble(4, balanceAfter);
+            pstmt.executeUpdate();
+        } catch (SQLException e) {
+             System.err.println("Database error saving transaction: " + e.getMessage());
         }
     }
 }

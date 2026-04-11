@@ -233,18 +233,18 @@ function App() {
     try {
       if (txType === 'TRANSFER') {
         const payload = {
-          senderAccNum: txSourceAcc,
-          receiverAccNum: parseInt(txDestAcc),
+          fromAccNum: txSourceAcc,
+          toAccNum: parseInt(txDestAcc),
           amount: parseFloat(txAmount),
           pin: parseInt(txPin)
         };
         const response = await fetch('http://localhost:8080/api/accounts/transfer', {
-          method: 'PUT',
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
         const text = await response.text();
-        if (text.includes("Success")) {
+        if (text.includes("Successfull") || text.includes("Success")) {
           setTxStatus('success');
           setTxMessage(text);
         } else {
@@ -969,8 +969,36 @@ function App() {
                         </div>
                       )}
                     </div>
-
                   </div>
+
+                  {/* RECENT TRANSACTIONS WIDGET */}
+                  <div style={{ backgroundColor: theme.bgWhite, padding: '30px', borderRadius: '8px', border: `1px solid ${theme.borderLight}`, animation: 'fadeIn 0.5s', marginTop: '20px' }}>
+                     <h4 style={{ color: theme.darkBrown, margin: '0 0 20px 0', fontSize: '14px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: `1px solid ${theme.borderLight}`, paddingBottom: '10px' }}>Ledger History</h4>
+                     {txSourceAcc ? (
+                       (() => {
+                         const acc = accountData.find(a => a.accnum === txSourceAcc);
+                         if (acc && acc.transactions && acc.transactions.length > 0) {
+                           // Try displaying up to 4 recent transactions
+                           return acc.transactions.slice(0, 4).map((tx, idx) => (
+                              <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: idx === acc.transactions.length - 1 ? 'none' : `1px solid ${theme.borderLight}` }}>
+                                 <div>
+                                   <div style={{ fontSize: '13px', fontWeight: 'bold', color: theme.darkBrown, textTransform: 'capitalize' }}>{tx.type || tx.desc || "Transaction"}</div>
+                                   <div style={{ fontSize: '11px', color: theme.textLight }}>{tx.date || new Date().toLocaleDateString()} • ID: {tx.id || '--'}</div>
+                                 </div>
+                                 <div style={{ fontSize: '14px', fontWeight: 'bold', color: tx.amount < 0 || tx.type === 'Withdraw' ? '#D32F2F' : theme.forestGreen }}>
+                                    {tx.amount > 0 && tx.type !== 'Withdraw' ? '+' : ''}₹{Math.abs(tx.amount).toLocaleString()}
+                                 </div>
+                              </div>
+                           ));
+                         } else {
+                           return <div style={{ fontSize: '13px', color: theme.textLight, textAlign: 'center', padding: '20px 0' }}>No transactions recorded in current ledger session.</div>;
+                         }
+                       })()
+                     ) : (
+                       <div style={{ fontSize: '13px', color: theme.textLight, textAlign: 'center', padding: '20px 0' }}>Select an originating account to view history.</div>
+                     )}
+                  </div>
+
                 </div>
 
               </div>

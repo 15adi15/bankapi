@@ -75,6 +75,7 @@ public class AccountController {
             return "Transaction Failed " + e.getMessage();
         }
         accountDAO.updateAccountBalance(accNum, currentAccount.getBalance());
+        accountDAO.saveTransaction(accNum, transactiondata.action.toUpperCase(), transactiondata.amount, currentAccount.getBalance());
         return "Transaction Successfull " + transactiondata.action + "New Balance: ₹" + currentAccount.getBalance();
     }
 
@@ -104,6 +105,10 @@ public class AccountController {
             // step 3: database sync
             accountDAO.updateAccountBalance(sender.getAccnum(), sender.getBalance());
             accountDAO.updateAccountBalance(receiver.getAccnum(), receiver.getBalance());
+
+            // step 4: log to transactions ledger
+            accountDAO.saveTransaction(sender.getAccnum(), "TRANSFER OUT", -data.amount, sender.getBalance());
+            accountDAO.saveTransaction(receiver.getAccnum(), "TRANSFER IN", data.amount, receiver.getBalance());
 
             return "Transaction Successfull! Sent ₹" + data.amount + " to " + receiver.username;
         } catch (Exception e) {
