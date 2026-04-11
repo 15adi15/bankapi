@@ -17,6 +17,23 @@ function App() {
   const [error, setError] = useState('');
   const [accountData, setAccountData] = useState([]);
 
+  // --- NEW ACCOUNT CREATION STATE ---
+  const [openAccountModal, setOpenAccountModal] = useState(false);
+  const [newAccType, setNewAccType] = useState('SAVINGS');
+  const [newAccUsername, setNewAccUsername] = useState('');
+  const [newAccPin, setNewAccPin] = useState('');
+  const [newAccDeposit, setNewAccDeposit] = useState('');
+  const [createAccMessage, setCreateAccMessage] = useState('');
+
+  // --- TRANSACT & TRANSFER STATE ---
+  const [txType, setTxType] = useState('DEPOSIT'); // DEPOSIT, WITHDRAW, TRANSFER
+  const [txSourceAcc, setTxSourceAcc] = useState(null);
+  const [txDestAcc, setTxDestAcc] = useState('');
+  const [txAmount, setTxAmount] = useState('');
+  const [txPin, setTxPin] = useState('');
+  const [txStatus, setTxStatus] = useState(null); // null, 'processing', 'success', 'error'
+  const [txMessage, setTxMessage] = useState('');
+
   // --- THE AUTH SYNC HANDSHAKE ---
   const handleLogin = async () => {
     setError('');
@@ -25,6 +42,7 @@ function App() {
       // 1. Talk to Google
       const result = await logInWithGoogle();
       const userEmail = result.user.email;
+      setEmail(userEmail); // Preserve the email in state for future account creation!
       console.log("Firebase authenticated email:", userEmail);
 
       // 2. Talk to Spring Boot
@@ -136,12 +154,128 @@ function App() {
     setUnlockedAccounts(unlockedAccounts.filter(id => id !== accountId));
   };
 
-  const handleLoginSubmit = (e) => {
+  const handleLoginSubmit = async (e) => {
     e.preventDefault();
-    // // Firebase auth logic goes here
-    setShowAuthModal(false);
-    setIsLoggedIn(true);
-    setActiveTab('accounts');
+    // Bypass Firebase and use the manually typed email to hit Spring Boot directly
+    setError('');
+    
+    try {
+      const response = await fetch('http://localhost:8080/api/accounts/auth/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email })
+      });
+
+      const rawText = await response.text();
+      let data;
+      try { data = JSON.parse(rawText); } catch (e) { data = rawText; }
+
+      if (data === "NO_ACCOUNT_FOUND" || data.status === "NO_ACCOUNT_FOUND") {
+        // Allow them inside but with empty array so they can create an account
+        setAccountData([]);
+      } else if (Array.isArray(data)) {
+        setAccountData(data);
+      } else {
+        setAccountData([data]);
+      }
+
+      setShowAuthModal(false);
+      setIsLoggedIn(true);
+      setActiveTab('accounts');
+    } catch (err) {
+      console.error(err);
+      setError("Server connection failed.");
+    }
+  };
+
+  const handleOpenAccountSubmit = async (e) => {
+    e.preventDefault();
+    setCreateAccMessage('');
+    try {
+      const payload = {
+        username: newAccUsername,
+        pin: parseInt(newAccPin),
+        balance: parseFloat(newAccDeposit),
+        accountType: newAccType,
+        email: email // From Firebase
+      };
+      
+      const response = await fetch('http://localhost:8080/api/accounts/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      
+      const text = await response.text();
+      setCreateAccMessage(text);
+      
+      if (text.includes("Success!")) {
+        // Clear form
+        setNewAccUsername('');
+        setNewAccPin('');
+        setNewAccDeposit('');
+      }
+    } catch (err) {
+      setCreateAccMessage('Server error while connecting to Spring Boot.');
+    }
+  };
+
+  const handleExecuteTransaction = async (e) => {
+    e.preventDefault();
+    if (!txSourceAcc) {
+      setTxStatus('error');
+      setTxMessage('Please select an originating account.');
+      return;
+    }
+    setTxStatus('processing');
+    setTxMessage('');
+
+    try {
+      if (txType === 'TRANSFER') {
+        const payload = {
+          senderAccNum: txSourceAcc,
+          receiverAccNum: parseInt(txDestAcc),
+          amount: parseFloat(txAmount),
+          pin: parseInt(txPin)
+        };
+        const response = await fetch('http://localhost:8080/api/accounts/transfer', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const text = await response.text();
+        if (text.includes("Success")) {
+          setTxStatus('success');
+          setTxMessage(text);
+        } else {
+          setTxStatus('error');
+          setTxMessage(text);
+        }
+      } else {
+        // DEPOSIT or WITHDRAW
+        const payload = {
+          amount: parseFloat(txAmount),
+          action: txType,
+          pin: parseInt(txPin)
+        };
+        const response = await fetch(`http://localhost:8080/api/accounts/${txSourceAcc}/transaction`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const text = await response.text();
+        if (text.includes("Success")) {
+          setTxStatus('success');
+          setTxMessage(text);
+        } else {
+          setTxStatus('error');
+          setTxMessage(text);
+        }
+      }
+    } catch (err) {
+      setTxStatus('error');
+      setTxMessage('Network error. Transaction aborted.');
+    }
   };
 
   // --- PREMIUM UI THEME ---
@@ -477,6 +611,51 @@ function App() {
         </div>
       )}
 
+      {/* OPEN ACCOUNT MODAL */}
+      {openAccountModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(43, 27, 23, 0.85)', zIndex: 2000, display: 'flex', justifyContent: 'center', alignItems: 'center', animation: 'fadeIn 0.2s' }}>
+          <div style={{ backgroundColor: theme.cardWhite, padding: '40px', borderRadius: '12px', width: '100%', maxWidth: '400px', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', position: 'relative' }}>
+            <button
+               onClick={() => { setOpenAccountModal(false); setCreateAccMessage(''); }}
+               style={{ position: 'absolute', top: '20px', right: '20px', background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: theme.textLight }}
+            >✕</button>
+            <h3 style={{ textAlign: 'center', color: theme.darkBrown, marginTop: 0, marginBottom: '10px', fontSize: '22px', fontWeight: '500' }}>Open Wealth Account</h3>
+            
+            <form onSubmit={handleOpenAccountSubmit}>
+              {createAccMessage && <div style={{ color: createAccMessage.includes("Success!") ? theme.forestGreen : '#D32F2F', fontSize: '14px', marginBottom: '15px', textAlign: 'center', fontWeight: 'bold' }}>{createAccMessage}</div>}
+              
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ display: 'block', fontSize: '12px', color: theme.textLight, marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '1px' }}>Account Type</label>
+                <select value={newAccType} onChange={(e) => setNewAccType(e.target.value)} style={{ width: '100%', padding: '12px', border: `1px solid ${theme.borderLight}`, borderRadius: '6px', fontSize: '15px', outline: 'none' }}>
+                  <option value="SAVINGS">Savings Account (4.5% APY)</option>
+                  <option value="CREDIT">Credit Line (Max Swipe 100k)</option>
+                </select>
+              </div>
+
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ display: 'block', fontSize: '12px', color: theme.textLight, marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '1px' }}>Account Holder Name</label>
+                <input type="text" value={newAccUsername} onChange={(e) => setNewAccUsername(e.target.value)} required style={{ width: '100%', padding: '12px', border: `1px solid ${theme.borderLight}`, borderRadius: '6px', fontSize: '15px' }} placeholder="Your Name" />
+              </div>
+              
+              <div style={{ marginBottom: '15px', display: 'flex', gap: '15px' }}>
+                 <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontSize: '12px', color: theme.textLight, marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '1px' }}>Initial Deposit (₹)</label>
+                    <input type="number" min="0" step="0.01" value={newAccDeposit} onChange={(e) => setNewAccDeposit(e.target.value)} required style={{ width: '100%', padding: '12px', border: `1px solid ${theme.borderLight}`, borderRadius: '6px', fontSize: '15px' }} placeholder="50000" />
+                 </div>
+                 <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontSize: '12px', color: theme.textLight, marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '1px' }}>Secure PIN</label>
+                    <input type="password" maxLength="4" value={newAccPin} onChange={(e) => setNewAccPin(e.target.value.replace(/\D/g, ''))} required style={{ width: '100%', padding: '12px', border: `1px solid ${theme.borderLight}`, borderRadius: '6px', fontSize: '15px', letterSpacing: '4px' }} placeholder="••••" />
+                 </div>
+              </div>
+
+              <button type="submit" style={{ width: '100%', padding: '15px', backgroundColor: theme.darkBrown, color: 'white', border: 'none', borderRadius: '6px', fontSize: '16px', fontWeight: '600', cursor: 'pointer', transition: '0.2s', marginTop: '10px' }}>
+                 Instantiate Portfolio
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Define inline keyframes */}
       <style>{`
         @keyframes fadeIn {
@@ -612,7 +791,7 @@ function App() {
             <div style={{ backgroundColor: theme.cardWhite, padding: '24px', borderRadius: '8px', border: `1px solid ${theme.borderLight}`, boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
               <h4 style={{ color: theme.darkBrown, margin: '0 0 20px 0', fontSize: '16px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>Wealth Concierge</h4>
               
-              <button onClick={() => alert('New Account form will be engineered soon!')} style={{ width: '100%', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'transparent', border: `1px solid ${theme.borderLight}`, borderRadius: '6px', color: theme.darkBrown, fontSize: '14px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s', marginBottom: '10px' }} onMouseOver={(e) => { e.currentTarget.style.backgroundColor = theme.bgWhite; e.currentTarget.style.borderColor = theme.bronze; }} onMouseOut={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.borderColor = theme.borderLight; }}>
+              <button onClick={() => setOpenAccountModal(true)} style={{ width: '100%', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'transparent', border: `1px solid ${theme.borderLight}`, borderRadius: '6px', color: theme.darkBrown, fontSize: '14px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s', marginBottom: '10px' }} onMouseOver={(e) => { e.currentTarget.style.backgroundColor = theme.bgWhite; e.currentTarget.style.borderColor = theme.bronze; }} onMouseOut={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.borderColor = theme.borderLight; }}>
                 <span style={{color: theme.bronze, fontSize: '18px'}}>✛</span> Open New Account
               </button>
               
@@ -674,9 +853,128 @@ function App() {
         {activeTab === 'transact & transfer' && (
           <div style={{ animation: 'fadeIn 0.5s' }}>
             <h2 style={{ color: theme.darkBrown, fontWeight: '300', marginBottom: '30px', fontSize: '32px' }}>Move Capital</h2>
-            <div style={{ backgroundColor: theme.cardWhite, padding: '40px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', borderTop: `4px solid ${theme.bronze}` }}>
-              <p style={{ color: theme.textLight, margin: 0 }}>UI for Withdrawals, Deposits, and Wire Transfers will go here.</p>
-            </div>
+            
+            {txStatus === 'success' ? (
+              <div style={{ backgroundColor: theme.cardWhite, padding: '60px 40px', borderRadius: '8px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', borderTop: `4px solid ${theme.forestGreen}`, textAlign: 'center', animation: 'fadeIn 0.5s' }}>
+                <div style={{ width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#E8F5E9', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto' }}>
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill={theme.forestGreen}><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                </div>
+                <h3 style={{ color: theme.darkBrown, fontSize: '28px', marginBottom: '10px' }}>Transaction Executed</h3>
+                <p style={{ color: theme.textLight, fontSize: '16px', marginBottom: '40px' }}>{txMessage}</p>
+                <button onClick={() => { setTxStatus(null); setTxAmount(''); setTxPin(''); setTxDestAcc(''); }} style={{ backgroundColor: 'transparent', border: `1px solid ${theme.bronze}`, color: theme.darkBrown, padding: '12px 30px', borderRadius: '4px', cursor: 'pointer', fontWeight: '600', fontSize: '15px', transition: 'all 0.2s' }} onMouseOver={(e) => { e.currentTarget.style.backgroundColor = theme.bronze; e.currentTarget.style.color = 'white'; }} onMouseOut={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = theme.darkBrown; }}>
+                  Execute Another Protocol
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: '40px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                
+                {/* LEFT: EXECUTION TERMINAL */}
+                <div style={{ flex: '1 1 600px', backgroundColor: theme.cardWhite, padding: '40px', borderRadius: '8px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', border: `1px solid ${theme.borderLight}` }}>
+                  
+                  {/* Action Selection Segmented Control */}
+                  <div style={{ display: 'flex', backgroundColor: theme.bgWhite, borderRadius: '8px', padding: '6px', marginBottom: '40px', border: `1px solid ${theme.borderLight}` }}>
+                    {['DEPOSIT', 'WITHDRAW', 'TRANSFER'].map(type => (
+                      <button key={type} type="button" onClick={() => setTxType(type)} style={{ flex: 1, padding: '14px', borderRadius: '6px', border: 'none', backgroundColor: txType === type ? 'white' : 'transparent', color: txType === type ? theme.darkBrown : theme.textLight, fontWeight: txType === type ? 'bold' : '500', fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s', boxShadow: txType === type ? '0 2px 8px rgba(0,0,0,0.05)' : 'none', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                        {type}
+                      </button>
+                    ))}
+                  </div>
+
+                  <form onSubmit={handleExecuteTransaction}>
+                    {/* Source Account Selection */}
+                    <div style={{ marginBottom: '40px' }}>
+                      <label style={{ display: 'block', fontSize: '12px', color: theme.textLight, marginBottom: '15px', textTransform: 'uppercase', letterSpacing: '1px' }}>Originating Account</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
+                        {accountData && accountData.map(acc => (
+                          <div key={acc.accnum} onClick={() => setTxSourceAcc(acc.accnum)} style={{ padding: '20px', border: `2px solid ${txSourceAcc === acc.accnum ? theme.bronze : theme.borderLight}`, borderRadius: '8px', cursor: 'pointer', backgroundColor: txSourceAcc === acc.accnum ? '#FAFAFA' : 'white', transition: 'all 0.2s' }}>
+                            <div style={{ fontSize: '11px', color: theme.textLight, fontWeight: 'bold', marginBottom: '5px' }}>{acc.account_type || "ACCOUNT"}</div>
+                            <div style={{ fontSize: '18px', color: theme.darkBrown, fontFamily: 'monospace' }}>•••• {String(acc.accnum).slice(-4)}</div>
+                            <div style={{ fontSize: '13px', color: theme.forestGreen, marginTop: '8px', fontWeight: '500' }}>₹{acc.balance ? acc.balance.toLocaleString() : 0}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Destination Account (Only for TRANSFER) */}
+                    {txType === 'TRANSFER' && (
+                      <div style={{ marginBottom: '40px', animation: 'fadeIn 0.3s' }}>
+                        <label style={{ display: 'block', fontSize: '12px', color: theme.textLight, marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '1px' }}>Destination Routing / Account (A/C)</label>
+                        <input type="number" value={txDestAcc} onChange={(e) => setTxDestAcc(e.target.value.replace(/\D/g, ''))} required placeholder="e.g. 402931009988" style={{ width: '100%', padding: '16px', boxSizing: 'border-box', border: `1px solid ${theme.borderLight}`, borderRadius: '6px', fontSize: '18px', fontFamily: 'monospace', outline: 'none' }} onFocus={(e) => e.target.style.borderColor = theme.darkBrown} onBlur={(e) => e.target.style.borderColor = theme.borderLight} />
+                      </div>
+                    )}
+
+                    {/* The Hero Amount Input */}
+                    <div style={{ marginBottom: '40px', textAlign: 'center' }}>
+                      <label style={{ display: 'block', fontSize: '12px', color: theme.textLight, marginBottom: '20px', textTransform: 'uppercase', letterSpacing: '1px' }}>Execution Amount (₹)</label>
+                      <input type="number" min="1" step="1" value={txAmount} onChange={(e) => setTxAmount(e.target.value)} required placeholder="0" style={{ width: '100%', boxSizing: 'border-box', textAlign: 'center', border: 'none', borderBottom: `2px solid ${theme.borderLight}`, fontSize: '56px', fontWeight: '300', color: theme.darkBrown, paddingBottom: '10px', outline: 'none', background: 'transparent' }} onFocus={(e) => e.target.style.borderColor = theme.bronze} onBlur={(e) => e.target.style.borderColor = theme.borderLight} />
+                    </div>
+
+                    {/* Authorization Gate */}
+                    <div style={{ borderTop: `1px solid ${theme.borderLight}`, paddingTop: '30px', marginTop: '20px' }}>
+                      <label style={{ display: 'block', fontSize: '12px', color: theme.textLight, marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '1px', textAlign: 'center' }}>Authorization PIN required</label>
+                      <div style={{ display: 'flex', gap: '15px', justifyContent: 'center', alignItems: 'center' }}>
+                        <input type="password" maxLength="4" required value={txPin} onChange={(e) => setTxPin(e.target.value.replace(/\D/g, ''))} placeholder="••••" style={{ width: '120px', padding: '15px', textAlign: 'center', border: `1px solid ${theme.borderLight}`, borderRadius: '6px', fontSize: '20px', letterSpacing: '8px', outline: 'none' }} onFocus={(e) => e.target.style.borderColor = theme.darkBrown} onBlur={(e) => e.target.style.borderColor = theme.borderLight} />
+                        <button type="submit" disabled={txStatus === 'processing'} style={{ padding: '16px 40px', backgroundColor: txStatus === 'processing' ? '#ccc' : theme.darkBrown, color: 'white', border: 'none', borderRadius: '6px', fontSize: '16px', fontWeight: '600', cursor: txStatus === 'processing' ? 'not-allowed' : 'pointer', transition: '0.2s', letterSpacing: '1px' }}>
+                          Authorize
+                        </button>
+                      </div>
+                      {txStatus === 'error' && <p style={{ color: '#D32F2F', textAlign: 'center', fontSize: '13px', marginTop: '15px', fontWeight: 'bold' }}>{txMessage}</p>}
+                    </div>
+                  </form>
+                </div>
+
+                {/* RIGHT: PROTOCOL SIDEBAR */}
+                <div style={{ flex: '0 1 350px' }}>
+                  <div style={{ backgroundColor: theme.bgWhite, padding: '30px', borderRadius: '8px', border: `1px solid ${theme.borderLight}` }}>
+                    <h4 style={{ color: theme.darkBrown, margin: '0 0 20px 0', fontSize: '14px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: `1px solid ${theme.borderLight}`, paddingBottom: '10px' }}>Security Protocol</h4>
+                    
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '20px' }}>
+                      <div style={{ width: '30px', height: '30px', borderRadius: '50%', backgroundColor: theme.cardWhite, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${theme.bronze}`, fontSize: '14px', color: theme.bronze }}>✓</div>
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: 'bold', color: theme.darkBrown }}>AES-256 Encrypted</div>
+                        <div style={{ fontSize: '11px', color: theme.textLight }}>Bank-grade secure tunnel</div>
+                      </div>
+                    </div>
+                    
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '20px' }}>
+                      <div style={{ width: '30px', height: '30px', borderRadius: '50%', backgroundColor: theme.cardWhite, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${theme.bronze}`, fontSize: '14px', color: theme.bronze }}>✓</div>
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: 'bold', color: theme.darkBrown }}>Zero Latency Network</div>
+                        <div style={{ fontSize: '11px', color: theme.textLight }}>Real-time PostgreSQL sync</div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '30px' }}>
+                      <div style={{ width: '30px', height: '30px', borderRadius: '50%', backgroundColor: theme.cardWhite, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${theme.bronze}`, fontSize: '14px', color: theme.bronze }}>✓</div>
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: 'bold', color: theme.darkBrown }}>Authenticated Origin</div>
+                        <div style={{ fontSize: '11px', color: theme.textLight }}>{email || "Verified Member"}</div>
+                      </div>
+                    </div>
+
+                    <div style={{ backgroundColor: theme.cardWhite, padding: '20px', borderRadius: '6px', border: `1px dashed ${theme.borderLight}` }}>
+                      <div style={{ fontSize: '10px', color: theme.textLight, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '10px' }}>Transaction Profile</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                         <span style={{ fontSize: '13px', color: theme.textLight }}>Action</span>
+                         <span style={{ fontSize: '13px', fontWeight: 'bold', color: theme.darkBrown }}>{txType}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                         <span style={{ fontSize: '13px', color: theme.textLight }}>Principal Amount</span>
+                         <span style={{ fontSize: '13px', fontWeight: 'bold', color: theme.forestGreen }}>{txAmount ? `₹${parseFloat(txAmount).toLocaleString()}` : '--'}</span>
+                      </div>
+                      {txType === 'TRANSFER' && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                           <span style={{ fontSize: '13px', color: theme.textLight }}>Target Node</span>
+                           <span style={{ fontSize: '13px', fontWeight: 'bold', color: theme.darkBrown, fontFamily: 'monospace' }}>{txDestAcc ? `...${txDestAcc.slice(-4)}` : '--'}</span>
+                        </div>
+                      )}
+                    </div>
+
+                  </div>
+                </div>
+
+              </div>
+            )}
           </div>
         )}
 

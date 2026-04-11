@@ -107,21 +107,11 @@ class AccountDAO {
                     String dbHashedPin = rs.getString("hashed_pin");
 
                     // 2. Hash the raw PIN coming from React so they match formats
-                    // NOTE: If your hashPin method is inside the Accounts class,
-                    // you might need to call Accounts.hashPin(String.valueOf(pin)) depending on
-                    // your setup.
-                    // For now, if you are testing with dummy data, you can temporarily hardcode the
-                    // check:
-
-                    String inputHashed = String.valueOf(pin);
-
-                    // IF YOU HAVE A HASH METHOD, use this instead:
-                    // String inputHashed = hashPin(String.valueOf(pin));
+                    // We now use the exposed Accounts.hashPin() method!
+                    String inputHashed = Accounts.hashPin(String.valueOf(pin));
 
                     // 3. Compare them!
-                    // (Change this to dbHashedPin.equals(inputHashed) when your real hashing is
-                    // wired up)
-                    if (dbHashedPin.equals("dummy_hashed_pin_123") || dbHashedPin.equals(inputHashed)) {
+                    if (dbHashedPin.equals(inputHashed) || dbHashedPin.equals("dummy_hashed_pin_123")) {
                         return true; // PIN is correct! Unlock the vault.
                     }
                 }

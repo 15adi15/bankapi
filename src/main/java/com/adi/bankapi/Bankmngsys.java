@@ -126,7 +126,7 @@ abstract class Accounts {
     }
 
     // SHA-256 Hashing implementation
-    protected String hashPin(String pin) {
+    public static String hashPin(String pin) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] encodedhash = digest.digest(pin.getBytes());
