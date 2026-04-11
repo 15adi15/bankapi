@@ -107,19 +107,28 @@ function App() {
     }
   ];
 
-  const handleUnlockSubmit = (e) => {
+  const handleUnlockSubmit = async (e) => {
     e.preventDefault();
-    const targetAccount = accountData.find(a => a.accnum === pinModalOpenFor);
+    setPinError('');
 
-    // As the real PIN is hashed and securely locked away in Java, 
-    // we will simulate the validation with '1234' for now.
-    if (targetAccount && pinInput === '1234') {
-      setUnlockedAccounts([...unlockedAccounts, targetAccount.accnum]);
-      setPinModalOpenFor(null);
-      setPinInput('');
-      setPinError('');
-    } else {
-      setPinError('Incorrect PIN for this account.');
+    try {
+      const response = await fetch('http://localhost:8080/api/accounts/auth/unlock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accNum: pinModalOpenFor, pin: parseInt(pinInput) })
+      });
+      
+      const isUnlocked = await response.json();
+
+      if (isUnlocked) {
+        setUnlockedAccounts([...unlockedAccounts, pinModalOpenFor]);
+        setPinModalOpenFor(null);
+        setPinInput('');
+      } else {
+        setPinError('Access Denied: Invalid Security PIN.');
+      }
+    } catch (err) {
+      setPinError('Server error. Could not verify PIN.');
     }
   };
 
@@ -515,17 +524,20 @@ function App() {
       </div>
 
       {/* 3. MAIN CONTENT AREA */}
-      <main style={{ maxWidth: '900px', margin: '50px auto', padding: '0 20px' }}>
+      <main style={{ maxWidth: '1150px', margin: '50px auto', padding: '0 20px' }}>
 
         {/* --- TAB: ACCOUNTS --- */}
         {activeTab === 'accounts' && (
-          <div style={{ animation: 'fadeIn 0.5s' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '30px' }}>
-              <h2 style={{ color: theme.darkBrown, fontWeight: '300', margin: 0, fontSize: '32px' }}>Your Portfolio</h2>
-              <span style={{ color: theme.textLight, fontSize: '14px' }}>{accountData ? accountData.length : 0} Accounts Found</span>
-            </div>
+          <div style={{ animation: 'fadeIn 0.5s', display: 'flex', gap: '40px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+            
+            {/* LEFT COLUMN (PORTFOLIO LIST) */}
+            <div style={{ flex: '1 1 650px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '30px' }}>
+                <h2 style={{ color: theme.darkBrown, fontWeight: '300', margin: 0, fontSize: '32px' }}>Your Portfolio</h2>
+                <span style={{ color: theme.textLight, fontSize: '14px' }}>{accountData ? accountData.length : 0} Accounts Found</span>
+              </div>
 
-            <div style={{ display: 'grid', gap: '24px' }}>
+              <div style={{ display: 'grid', gap: '24px' }}>
               {accountData && accountData.map((account, index) => {
                 const isUnlocked = unlockedAccounts.includes(account.accnum);
 
@@ -592,6 +604,70 @@ function App() {
               })}
             </div>
           </div>
+
+          {/* RIGHT COLUMN (SIDEBAR) */}
+          <div style={{ flex: '0 1 350px', display: 'flex', flexDirection: 'column', gap: '30px' }}>
+              
+            {/* WIDGET 1: Wealth Concierge */}
+            <div style={{ backgroundColor: theme.cardWhite, padding: '24px', borderRadius: '8px', border: `1px solid ${theme.borderLight}`, boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
+              <h4 style={{ color: theme.darkBrown, margin: '0 0 20px 0', fontSize: '16px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>Wealth Concierge</h4>
+              
+              <button onClick={() => alert('New Account form will be engineered soon!')} style={{ width: '100%', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'transparent', border: `1px solid ${theme.borderLight}`, borderRadius: '6px', color: theme.darkBrown, fontSize: '14px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s', marginBottom: '10px' }} onMouseOver={(e) => { e.currentTarget.style.backgroundColor = theme.bgWhite; e.currentTarget.style.borderColor = theme.bronze; }} onMouseOut={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.borderColor = theme.borderLight; }}>
+                <span style={{color: theme.bronze, fontSize: '18px'}}>✛</span> Open New Account
+              </button>
+              
+              <button style={{ width: '100%', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'transparent', border: `1px solid ${theme.borderLight}`, borderRadius: '6px', color: theme.darkBrown, fontSize: '14px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s', marginBottom: '10px' }} onMouseOver={(e) => { e.currentTarget.style.backgroundColor = theme.bgWhite; e.currentTarget.style.borderColor = theme.bronze; }} onMouseOut={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.borderColor = theme.borderLight; }}>
+                <span style={{color: theme.bronze, fontSize: '18px'}}>⎘</span> Link External Vault
+              </button>
+              
+              <button style={{ width: '100%', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'transparent', border: `1px solid ${theme.borderLight}`, borderRadius: '6px', color: theme.darkBrown, fontSize: '14px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s', marginBottom: '10px' }} onMouseOver={(e) => { e.currentTarget.style.backgroundColor = theme.bgWhite; e.currentTarget.style.borderColor = theme.bronze; }} onMouseOut={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.borderColor = theme.borderLight; }}>
+                <span style={{color: theme.bronze, fontSize: '18px'}}>✈</span> Request Wire Transfer
+              </button>
+              
+              <button style={{ width: '100%', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: theme.darkBrown, border: `1px solid ${theme.darkBrown}`, borderRadius: '6px', color: 'white', fontSize: '14px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s' }} onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#1A100E'; }} onMouseOut={(e) => { e.currentTarget.style.backgroundColor = theme.darkBrown; }}>
+                <span style={{color: theme.bronze, fontSize: '18px'}}>💬</span> Contact Advisor
+              </button>
+            </div>
+
+            {/* WIDGET 2: Locked Allocation Chart */}
+            <div style={{ backgroundColor: theme.cardWhite, padding: '24px', borderRadius: '8px', border: `1px solid ${theme.borderLight}`, boxShadow: '0 4px 15px rgba(0,0,0,0.02)', position: 'relative' }}>
+              <h4 style={{ color: theme.darkBrown, margin: '0 0 10px 0', fontSize: '16px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>Asset Allocation</h4>
+              <p style={{ color: theme.textLight, fontSize: '13px', margin: '0 0 20px 0' }}>Overall Portfolio Distribution</p>
+              
+              <div style={{ position: 'relative', width: '180px', height: '180px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {/* CSS Conic Gradient to mock a Donut Chart perfectly */}
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: '50%', background: `conic-gradient(${theme.forestGreen} 0% 35%, ${theme.bronze} 35% 60%, ${theme.darkBrown} 60% 100%)`, filter: 'blur(5px)', opacity: 0.8, WebkitMaskImage: 'radial-gradient(circle, transparent 55%, black 56%)', maskImage: 'radial-gradient(circle, transparent 55%, black 56%)' }}></div>
+                
+                {/* Secure Lock Overlay Overlay */}
+                <div style={{ position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <div style={{ backgroundColor: 'rgba(255,255,255,0.95)', padding: '12px', borderRadius: '50%', marginBottom: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill={theme.darkBrown}><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6zm9 14H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/></svg>
+                  </div>
+                  <span style={{ fontSize: '11px', fontWeight: 'bold', color: theme.darkBrown, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Unlock Accounts</span>
+                </div>
+              </div>
+            </div>
+
+            {/* WIDGET 3: Market Intelligence */}
+            <div style={{ backgroundColor: theme.bgWhite, padding: '24px', borderRadius: '8px', border: `1px solid ${theme.borderLight}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                <h4 style={{ color: theme.darkBrown, margin: 0, fontSize: '16px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>Global Insights</h4>
+                <div style={{ width: '8px', height: '8px', backgroundColor: theme.forestGreen, borderRadius: '50%', boxShadow: `0 0 8px ${theme.forestGreen}` }}></div>
+              </div>
+              
+              <div style={{ borderBottom: `1px solid ${theme.borderLight}`, paddingBottom: '16px', marginBottom: '16px', cursor: 'pointer' }} onMouseOver={(e) => e.currentTarget.querySelector('h5').style.color = theme.bronze} onMouseOut={(e) => e.currentTarget.querySelector('h5').style.color = theme.darkBrown}>
+                <span style={{ fontSize: '11px', color: theme.textLight, textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 'bold' }}>Equities • 2H Ago</span>
+                <h5 style={{ margin: '6px 0', fontSize: '14px', color: theme.darkBrown, transition: 'color 0.2s' }}>Algorithmic Trading Strategies for Q3 Tech Rallies</h5>
+              </div>
+
+              <div style={{ cursor: 'pointer' }} onMouseOver={(e) => e.currentTarget.querySelector('h5').style.color = theme.bronze} onMouseOut={(e) => e.currentTarget.querySelector('h5').style.color = theme.darkBrown}>
+                <span style={{ fontSize: '11px', color: theme.textLight, textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 'bold' }}>Macro • Today</span>
+                <h5 style={{ margin: '6px 0', fontSize: '14px', color: theme.darkBrown, transition: 'color 0.2s' }}>Federal Reserve Outlines Potential 2026 Rate Cuts</h5>
+              </div>
+            </div>
+
+          </div>
+        </div>
         )}
 
         {/* --- TAB: TRANSACT & TRANSFER --- */}

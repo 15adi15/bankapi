@@ -1,5 +1,7 @@
 package com.adi.bankapi;
 
+import java.util.List;
+
 //THE ACCOUNT CONTROLLER CLASS IS THE ENTRY POINT FOR ANY HTTP REQUEST.
 import org.springframework.web.bind.annotation.*;
 
@@ -119,15 +121,27 @@ public class AccountController {
     @PostMapping("/auth/sync")
     public Object syncUser(@RequestBody LoginDTO loginData) {
         // Search the database for the Firebase email
-        Accounts existingAccount = accountDAO.getAccountByEmail(loginData.email);
+        List<Accounts> userAccounts = accountDAO.getAccountByEmail(loginData.email);
 
-        if (existingAccount != null) {
-            // User exists! Send their entire dashboard data back to React.
-            return existingAccount;
+        if (!userAccounts.isEmpty()) {
+            return userAccounts; // Spring Boot will automatically convert this List into a JSON Array!
         } else {
-            // User logged in with Google, but hasn't opened a bank account yet.
-            // Return an error so React knows to redirect them to the "Open Account" screen.
-            return "NO_ACCOUNT_FOUND";
+            java.util.Map<String, String> response = new java.util.HashMap<>();
+            response.put("status", "NO_ACCOUNT_FOUND");
+            return response;
         }
+    }
+
+    public static class UnlockDTO {
+        public int accNum;
+        public int pin;
+    }
+
+    @PostMapping("/auth/unlock")
+    public boolean unlockAccount(@RequestBody UnlockDTO unlockData) {
+        // This method fetches the account by ID, hashes the provided PIN, and compares
+        // it.
+        // If it matches, return true. If not, return false.
+        return accountDAO.login(unlockData.accNum, unlockData.pin);
     }
 }

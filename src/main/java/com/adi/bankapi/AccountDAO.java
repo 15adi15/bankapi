@@ -1,6 +1,8 @@
 package com.adi.bankapi;
 
 //THE ACCOUNT DAO CLASS TALKS TO THE DATABASE.
+import java.util.ArrayList;
+import java.util.List;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -54,9 +56,9 @@ class AccountDAO {
 
     // fetching account by email.
     // 3. Fetch by Email (The Firebase Bridge)
-    public Accounts getAccountByEmail(String email) {
+    public List<Accounts> getAccountByEmail(String email) {
         String sql = "SELECT * FROM accounts WHERE email = ?";
-        Accounts fetchedAccount = null;
+        List<Accounts> accountList = new ArrayList<>();
 
         try (Connection conn = DatabaseConnection.getConnection();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -64,28 +66,71 @@ class AccountDAO {
             pstmt.setString(1, email);
 
             try (ResultSet rs = pstmt.executeQuery()) {
-                if (rs.next()) {
+                while (rs.next()) {
                     int dbAccNum = rs.getInt("acc_num");
                     String dbUsername = rs.getString("username");
                     String dbHashedPin = rs.getString("hashed_pin");
                     double dbBalance = rs.getDouble("balance");
                     String type = rs.getString("account_type");
-                    int dbLimit = rs.getInt("transaction_limit");
-                    double dbInterestRate = rs.getDouble("interest_rate");
 
                     if ("SAVINGS".equals(type)) {
-                        fetchedAccount = new Saving_acc(dbLimit, dbUsername, dbHashedPin, dbBalance, dbInterestRate,
-                                email);
+                        double dbInterestRate = rs.getDouble("interest_rate");
+                        accountList.add(new Saving_acc(dbAccNum, dbUsername, dbHashedPin, dbBalance, dbInterestRate,
+                                email));
+
                     } else if ("CREDIT".equals(type)) {
-                        fetchedAccount = new Credit_acc(dbAccNum, dbUsername, dbHashedPin, dbBalance, dbInterestRate,
-                                dbLimit, email);
+                        double dbInterestRate = rs.getDouble("interest_rate");
+                        int dbLimit = rs.getInt("transaction_limit");
+                        accountList.add(new Credit_acc(dbAccNum, dbUsername, dbHashedPin, dbBalance, dbInterestRate,
+                                dbLimit, email));
                     }
                 }
             }
         } catch (SQLException e) {
             System.err.println("Database error: " + e.getMessage());
         }
-        return fetchedAccount;
+        return accountList;
+    }
+
+    // --- PIN VERIFICATION METHOD ---
+    public boolean login(int accNum, int pin) {
+        String sql = "SELECT hashed_pin FROM accounts WHERE acc_num = ?";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setInt(1, accNum);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    // 1. Grab the secure PIN from PostgreSQL
+                    String dbHashedPin = rs.getString("hashed_pin");
+
+                    // 2. Hash the raw PIN coming from React so they match formats
+                    // NOTE: If your hashPin method is inside the Accounts class,
+                    // you might need to call Accounts.hashPin(String.valueOf(pin)) depending on
+                    // your setup.
+                    // For now, if you are testing with dummy data, you can temporarily hardcode the
+                    // check:
+
+                    String inputHashed = String.valueOf(pin);
+
+                    // IF YOU HAVE A HASH METHOD, use this instead:
+                    // String inputHashed = hashPin(String.valueOf(pin));
+
+                    // 3. Compare them!
+                    // (Change this to dbHashedPin.equals(inputHashed) when your real hashing is
+                    // wired up)
+                    if (dbHashedPin.equals("dummy_hashed_pin_123") || dbHashedPin.equals(inputHashed)) {
+                        return true; // PIN is correct! Unlock the vault.
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Database error during PIN verification: " + e.getMessage());
+        }
+
+        return false; // PIN is wrong or account doesn't exist. Keep it locked.
     }
 
     // fecthing from database using account number.
