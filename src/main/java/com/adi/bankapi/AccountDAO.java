@@ -10,6 +10,10 @@ import java.util.Map;
 import java.sql.ResultSet;
 
 class AccountDAO {
+    
+    // Wire the Loan module internally
+    private LoanDAO loanDAO = new LoanDAO();
+
     // Inseritng into data base
     public void saveAccount(Accounts account) {// takes any type of "Account" object as input.
 
@@ -75,15 +79,19 @@ class AccountDAO {
 
                     if ("SAVINGS".equals(type)) {
                         double dbInterestRate = rs.getDouble("interest_rate");
-                        Saving_acc acc = new Saving_acc(dbAccNum, dbUsername, dbHashedPin, dbBalance, dbInterestRate, email);
+                        Saving_acc acc = new Saving_acc(dbAccNum, dbUsername, dbHashedPin, dbBalance, dbInterestRate,
+                                email);
                         loadTransactions(acc);
+                        acc.active_loans.addAll(loanDAO.getLoansByAccNum(acc.getAccnum()));
                         accountList.add(acc);
 
                     } else if ("CREDIT".equals(type)) {
                         double dbInterestRate = rs.getDouble("interest_rate");
                         int dbLimit = rs.getInt("transaction_limit");
-                        Credit_acc acc = new Credit_acc(dbAccNum, dbUsername, dbHashedPin, dbBalance, dbInterestRate, dbLimit, email);
+                        Credit_acc acc = new Credit_acc(dbAccNum, dbUsername, dbHashedPin, dbBalance, dbInterestRate,
+                                dbLimit, email);
                         loadTransactions(acc);
+                        acc.active_loans.addAll(loanDAO.getLoansByAccNum(acc.getAccnum()));
                         accountList.add(acc);
                     }
                 }
@@ -158,6 +166,7 @@ class AccountDAO {
                     }
                     if (fetchedAccount != null) {
                         loadTransactions(fetchedAccount);
+                        fetchedAccount.active_loans.addAll(loanDAO.getLoansByAccNum(fetchedAccount.getAccnum()));
                     }
                 }
             }
@@ -191,7 +200,7 @@ class AccountDAO {
     public void loadTransactions(Accounts account) {
         String sql = "SELECT * FROM transactions WHERE acc_num = ? ORDER BY created_at DESC LIMIT 10";
         try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setInt(1, account.getAccnum());
             try (ResultSet rs = pstmt.executeQuery()) {
                 while (rs.next()) {
@@ -201,7 +210,8 @@ class AccountDAO {
                     double balance_after = rs.getDouble("balance_after");
                     java.sql.Timestamp ts = rs.getTimestamp("created_at");
                     if (ts != null) {
-                        account.transactions.add(new Transaction(id, type, amount, balance_after, ts.toLocalDateTime()));
+                        account.transactions
+                                .add(new Transaction(id, type, amount, balance_after, ts.toLocalDateTime()));
                     }
                 }
             }
@@ -213,14 +223,15 @@ class AccountDAO {
     public void saveTransaction(int accNum, String type, double amount, double balanceAfter) {
         String sql = "INSERT INTO transactions (acc_num, transaction_type, amount, balance_after, created_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)";
         try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setInt(1, accNum);
             pstmt.setString(2, type);
             pstmt.setDouble(3, amount);
             pstmt.setDouble(4, balanceAfter);
             pstmt.executeUpdate();
         } catch (SQLException e) {
-             System.err.println("Database error saving transaction: " + e.getMessage());
+            System.err.println("Database error saving transaction: " + e.getMessage());
         }
     }
+
 }

@@ -118,6 +118,12 @@ abstract class Accounts {
         return this.transactions;
     }
 
+    // Dynamic list for loans
+    protected List<Loan> active_loans = new ArrayList<>();
+    public List<Loan> getActiveLoans() { 
+        return this.active_loans; 
+    }
+
     // System will generate new account numbers each time
     private int generateUniqueAccountNumber() {
         Random num = new Random();// built in function to generate random numbers
@@ -343,15 +349,96 @@ abstract class Loan {
     protected double interest_rate;
     protected double principle_amount;
     protected int tenure;// in monthes or years.
+    public String Loan_type;
 
     // Constructor for creating a Loan Object.
-    public Loan(String borrower_name, double interest_rate, double principle_amount, int tenure) {
+    public Loan(String borrower_name, double interest_rate, double principle_amount, int tenure, String Loan_type) {
         this.borrower_name = borrower_name;
         this.interest_rate = interest_rate;
         this.principle_amount = principle_amount;
         this.tenure = tenure;
+        this.Loan_type = Loan_type;
     }
+
+    // --- JACKSON GETTERS ---
+    public String getBorrowerName() { return borrower_name; }
+    public double getInterestRate() { return interest_rate; }
+    public double getPrincipleAmount() { return principle_amount; }
+    public int getTenure() { return tenure; }
+    public String getLoanType() { return Loan_type; }
 
     public abstract double interestrate();// Abstract Method to calculate interest rate for a specific Loan.
 
+}
+
+// --------------------HOME LOAN-----------------------
+class Home_Loan extends Loan {
+    public Home_Loan(String borrower_name, double principle_amount, int tenure) {
+        super(borrower_name, 0.0, principle_amount, tenure, "HOME_LOAN");
+        this.interest_rate = interestrate();
+    }
+
+    @Override
+    public double interestrate() {
+        // Base rate ~ 7.10% linked to current 2026 RBI Repo
+        double baseRate = 7.10;
+        
+        // High principle premium (over ₹50 Lakhs)
+        if (this.principle_amount > 5000000) {
+            baseRate += 0.50; 
+        }
+        // Long tenure premium (over 15 years = 180 months)
+        if (this.tenure > 180) {
+            baseRate += 0.25;
+        }
+        return baseRate;
+    }
+}
+
+// --------------------PERSONAL LOAN-----------------------
+class Personal_Loan extends Loan {
+    public Personal_Loan(String borrower_name, double principle_amount, int tenure) {
+        super(borrower_name, 0.0, principle_amount, tenure, "PERSONAL_LOAN");
+        this.interest_rate = interestrate();
+    }
+
+    @Override
+    public double interestrate() {
+        // Base unsecured rate ~ 10.50%
+        double baseRate = 10.50;
+        
+        // Unsecured long tenure risk (over 3 years = 36 months)
+        if (this.tenure > 36) {
+            baseRate += 1.50;
+        }
+        // Large unsecured sum risk (over ₹10 Lakhs)
+        if (this.principle_amount > 1000000) {
+            baseRate += 1.00;
+        }
+        return baseRate;
+    }
+}
+
+// --------------------EDUCATION LOAN-----------------------
+class Education_Loan extends Loan {
+    public Education_Loan(String borrower_name, double principle_amount, int tenure) {
+        super(borrower_name, 0.0, principle_amount, tenure, "EDUCATION_LOAN");
+        this.interest_rate = interestrate();
+    }
+
+    @Override
+    public double interestrate() {
+        // RBI student baseline ~ 8.50%
+        double baseRate = 8.50;
+        
+        // Over ₹7.5L typically requires collateral risk adjustment
+        if (this.principle_amount > 750000) {
+            baseRate += 1.50;
+        }
+        // Longer repayment window (over 10 years = 120 months)
+        if (this.tenure > 120) {
+            baseRate += 0.50;
+        }
+        return baseRate;
+    }
 }
