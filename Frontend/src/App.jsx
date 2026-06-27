@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { logInWithGoogle, logOut } from './firebase';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -25,6 +27,14 @@ function App() {
   const [newAccDeposit, setNewAccDeposit] = useState('');
   const [createAccMessage, setCreateAccMessage] = useState('');
 
+  // --- LOAN APPLICATION STATE ---
+  const [openLoanModal, setOpenLoanModal] = useState(false);
+  const [loanAccNum, setLoanAccNum] = useState('');
+  const [loanType, setLoanType] = useState('PERSONAL_LOAN');
+  const [loanAmount, setLoanAmount] = useState('');
+  const [loanTenure, setLoanTenure] = useState('24');
+  const [loanMessage, setLoanMessage] = useState('');
+
   // --- TRANSACT & TRANSFER STATE ---
   const [txType, setTxType] = useState('DEPOSIT'); // DEPOSIT, WITHDRAW, TRANSFER
   const [txSourceAcc, setTxSourceAcc] = useState(null);
@@ -45,7 +55,7 @@ function App() {
 
   const autoConnect = async (savedEmail) => {
     try {
-      const response = await fetch('http://localhost:8080/api/accounts/auth/sync', {
+      const response = await fetch(`${API_BASE_URL}/api/accounts/auth/sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: savedEmail })
@@ -75,12 +85,12 @@ function App() {
       // 1. Talk to Google
       const result = await logInWithGoogle();
       const userEmail = result.user.email;
-      setEmail(userEmail); 
+      setEmail(userEmail);
       localStorage.setItem('coreWealthEmail', userEmail); // Save to browser cache
       console.log("Firebase authenticated email:", userEmail);
 
       // 2. Talk to Spring Boot
-      const response = await fetch('http://localhost:8080/api/accounts/auth/sync', {
+      const response = await fetch(`${API_BASE_URL}/api/accounts/auth/sync`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -128,48 +138,19 @@ function App() {
     }
   };
 
-  // Use mock data instead of fetch calls
-  const mockAccounts = [
-    {
-      id: 'acc1',
-      name: 'Aditya Bhore',
-      type: 'SAVINGS',
-      number: '402931000420',
-      maskedNumber: '•••• 0420',
-      balance: 1250000.00,
-      pin: '1234', // simulated correct PIN
-      transactions: [
-        { id: 't1', date: '2026-04-09', desc: 'Wire Transfer - Global Tech Infr.', amount: -45000 },
-        { id: 't2', date: '2026-04-08', desc: 'Direct Deposit - CORE WEALTH', amount: 320000 },
-        { id: 't3', date: '2026-04-05', desc: 'ATM Withdrawal', amount: -10000 }
-      ]
-    },
-    {
-      id: 'acc2',
-      name: 'Aditya Bhore',
-      type: 'CHECKING',
-      number: '402931009988',
-      maskedNumber: '•••• 9988',
-      balance: 45000.50,
-      pin: '1234',
-      transactions: [
-        { id: 't4', date: '2026-04-10', desc: 'Coffee Shop - Onyx', amount: -450 },
-        { id: 't5', date: '2026-04-02', desc: 'Online Shopping', amount: -12500 }
-      ]
-    }
-  ];
+
 
   const handleUnlockSubmit = async (e) => {
     e.preventDefault();
     setPinError('');
 
     try {
-      const response = await fetch('http://localhost:8080/api/accounts/auth/unlock', {
+      const response = await fetch(`${API_BASE_URL}/api/accounts/auth/unlock`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ accNum: pinModalOpenFor, pin: parseInt(pinInput) })
       });
-      
+
       const isUnlocked = await response.json();
 
       if (isUnlocked) {
@@ -192,9 +173,9 @@ function App() {
     e.preventDefault();
     // Bypass Firebase and use the manually typed email to hit Spring Boot directly
     setError('');
-    
+
     try {
-      const response = await fetch('http://localhost:8080/api/accounts/auth/sync', {
+      const response = await fetch(`${API_BASE_URL}/api/accounts/auth/sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email })
@@ -234,16 +215,16 @@ function App() {
         accountType: newAccType,
         email: email // From Firebase
       };
-      
-      const response = await fetch('http://localhost:8080/api/accounts/create', {
+
+      const response = await fetch(`${API_BASE_URL}/api/accounts/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      
+
       const text = await response.text();
       setCreateAccMessage(text);
-      
+
       if (text.includes("Success!")) {
         // Clear form
         setNewAccUsername('');
@@ -273,7 +254,7 @@ function App() {
           amount: parseFloat(txAmount),
           pin: parseInt(txPin)
         };
-        const response = await fetch('http://localhost:8080/api/accounts/transfer', {
+        const response = await fetch(`${API_BASE_URL}/api/accounts/transfer`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -293,7 +274,7 @@ function App() {
           action: txType,
           pin: parseInt(txPin)
         };
-        const response = await fetch(`http://localhost:8080/api/accounts/${txSourceAcc}/transaction`, {
+        const response = await fetch(`${API_BASE_URL}/api/accounts/${txSourceAcc}/transaction`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -310,6 +291,40 @@ function App() {
     } catch (err) {
       setTxStatus('error');
       setTxMessage('Network error. Transaction aborted.');
+    }
+  };
+
+  const handleApplyLoanSubmit = async (e) => {
+    e.preventDefault();
+    setLoanMessage('');
+    try {
+      const payload = {
+        accNum: parseInt(loanAccNum),
+        loanType: loanType,
+        principleAmount: parseFloat(loanAmount),
+        tenureMonths: parseInt(loanTenure)
+      };
+
+      const response = await fetch(`${API_BASE_URL}/api/accounts/loan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const text = await response.text();
+      setLoanMessage(text);
+
+      if (text.includes("Success!")) {
+        // Refresh account data to show the new loan immediately!
+        autoConnect(email);
+        setTimeout(() => {
+          setOpenLoanModal(false);
+          setLoanMessage('');
+          setLoanAmount('');
+        }, 2000);
+      }
+    } catch (err) {
+      setLoanMessage('Server error while submitting application.');
     }
   };
 
@@ -651,14 +666,14 @@ function App() {
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(43, 27, 23, 0.85)', zIndex: 2000, display: 'flex', justifyContent: 'center', alignItems: 'center', animation: 'fadeIn 0.2s' }}>
           <div style={{ backgroundColor: theme.cardWhite, padding: '40px', borderRadius: '12px', width: '100%', maxWidth: '400px', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', position: 'relative' }}>
             <button
-               onClick={() => { setOpenAccountModal(false); setCreateAccMessage(''); }}
-               style={{ position: 'absolute', top: '20px', right: '20px', background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: theme.textLight }}
+              onClick={() => { setOpenAccountModal(false); setCreateAccMessage(''); }}
+              style={{ position: 'absolute', top: '20px', right: '20px', background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: theme.textLight }}
             >✕</button>
             <h3 style={{ textAlign: 'center', color: theme.darkBrown, marginTop: 0, marginBottom: '10px', fontSize: '22px', fontWeight: '500' }}>Open Wealth Account</h3>
-            
+
             <form onSubmit={handleOpenAccountSubmit}>
               {createAccMessage && <div style={{ color: createAccMessage.includes("Success!") ? theme.forestGreen : '#D32F2F', fontSize: '14px', marginBottom: '15px', textAlign: 'center', fontWeight: 'bold' }}>{createAccMessage}</div>}
-              
+
               <div style={{ marginBottom: '15px' }}>
                 <label style={{ display: 'block', fontSize: '12px', color: theme.textLight, marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '1px' }}>Account Type</label>
                 <select value={newAccType} onChange={(e) => setNewAccType(e.target.value)} style={{ width: '100%', padding: '12px', border: `1px solid ${theme.borderLight}`, borderRadius: '6px', fontSize: '15px', outline: 'none' }}>
@@ -671,20 +686,77 @@ function App() {
                 <label style={{ display: 'block', fontSize: '12px', color: theme.textLight, marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '1px' }}>Account Holder Name</label>
                 <input type="text" value={newAccUsername} onChange={(e) => setNewAccUsername(e.target.value)} required style={{ width: '100%', padding: '12px', border: `1px solid ${theme.borderLight}`, borderRadius: '6px', fontSize: '15px' }} placeholder="Your Name" />
               </div>
-              
+
               <div style={{ marginBottom: '15px', display: 'flex', gap: '15px' }}>
-                 <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', fontSize: '12px', color: theme.textLight, marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '1px' }}>Initial Deposit (₹)</label>
-                    <input type="number" min="0" step="0.01" value={newAccDeposit} onChange={(e) => setNewAccDeposit(e.target.value)} required style={{ width: '100%', padding: '12px', border: `1px solid ${theme.borderLight}`, borderRadius: '6px', fontSize: '15px' }} placeholder="50000" />
-                 </div>
-                 <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', fontSize: '12px', color: theme.textLight, marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '1px' }}>Secure PIN</label>
-                    <input type="password" maxLength="4" value={newAccPin} onChange={(e) => setNewAccPin(e.target.value.replace(/\D/g, ''))} required style={{ width: '100%', padding: '12px', border: `1px solid ${theme.borderLight}`, borderRadius: '6px', fontSize: '15px', letterSpacing: '4px' }} placeholder="••••" />
-                 </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: '12px', color: theme.textLight, marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '1px' }}>Initial Deposit (₹)</label>
+                  <input type="number" min="0" step="0.01" value={newAccDeposit} onChange={(e) => setNewAccDeposit(e.target.value)} required style={{ width: '100%', padding: '12px', border: `1px solid ${theme.borderLight}`, borderRadius: '6px', fontSize: '15px' }} placeholder="50000" />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: '12px', color: theme.textLight, marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '1px' }}>Secure PIN</label>
+                  <input type="password" maxLength="4" value={newAccPin} onChange={(e) => setNewAccPin(e.target.value.replace(/\D/g, ''))} required style={{ width: '100%', padding: '12px', border: `1px solid ${theme.borderLight}`, borderRadius: '6px', fontSize: '15px', letterSpacing: '4px' }} placeholder="••••" />
+                </div>
               </div>
 
               <button type="submit" style={{ width: '100%', padding: '15px', backgroundColor: theme.darkBrown, color: 'white', border: 'none', borderRadius: '6px', fontSize: '16px', fontWeight: '600', cursor: 'pointer', transition: '0.2s', marginTop: '10px' }}>
-                 Instantiate Portfolio
+                Instantiate Portfolio
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* LOAN APPLICATION MODAL */}
+      {openLoanModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(43, 27, 23, 0.85)', zIndex: 2000, display: 'flex', justifyContent: 'center', alignItems: 'center', animation: 'fadeIn 0.2s' }}>
+          <div style={{ backgroundColor: theme.cardWhite, padding: '40px', borderRadius: '12px', width: '100%', maxWidth: '400px', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', position: 'relative' }}>
+            <button
+              onClick={() => { setOpenLoanModal(false); setLoanMessage(''); }}
+              style={{ position: 'absolute', top: '20px', right: '20px', background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: theme.textLight }}
+            >✕</button>
+            <h3 style={{ textAlign: 'center', color: theme.darkBrown, marginTop: 0, marginBottom: '10px', fontSize: '22px', fontWeight: '500' }}>Capital Allocation Request</h3>
+
+            <form onSubmit={handleApplyLoanSubmit}>
+              {loanMessage && <div style={{ color: loanMessage.includes("Success!") ? theme.forestGreen : '#D32F2F', fontSize: '14px', marginBottom: '15px', textAlign: 'center', fontWeight: 'bold' }}>{loanMessage}</div>}
+
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ display: 'block', fontSize: '12px', color: theme.textLight, marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '1px' }}>Linked Account</label>
+                <select value={loanAccNum} onChange={(e) => setLoanAccNum(e.target.value)} required style={{ width: '100%', padding: '12px', border: `1px solid ${theme.borderLight}`, borderRadius: '6px', fontSize: '15px', outline: 'none' }}>
+                  <option value="" disabled>Select an account</option>
+                  {accountData && accountData.map(acc => (
+                    <option key={acc.accnum} value={acc.accnum}>{acc.account_type || 'ACCOUNT'} •••• {String(acc.accnum).slice(-4)}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ display: 'block', fontSize: '12px', color: theme.textLight, marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '1px' }}>Facility Type</label>
+                <select value={loanType} onChange={(e) => setLoanType(e.target.value)} style={{ width: '100%', padding: '12px', border: `1px solid ${theme.borderLight}`, borderRadius: '6px', fontSize: '15px', outline: 'none' }}>
+                  <option value="PERSONAL_LOAN">Personal Capital Line</option>
+                  <option value="HOME_LOAN">Real Estate Mortgage</option>
+                  <option value="EDUCATION_LOAN">Educational Financing</option>
+                </select>
+              </div>
+
+              <div style={{ marginBottom: '15px', display: 'flex', gap: '15px' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: '12px', color: theme.textLight, marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '1px' }}>Principal (₹)</label>
+                  <input type="number" min="10000" step="1000" value={loanAmount} onChange={(e) => setLoanAmount(e.target.value)} required style={{ width: '100%', padding: '12px', border: `1px solid ${theme.borderLight}`, borderRadius: '6px', fontSize: '15px' }} placeholder="500000" />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: '12px', color: theme.textLight, marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '1px' }}>Tenure</label>
+                  <select value={loanTenure} onChange={(e) => setLoanTenure(e.target.value)} style={{ width: '100%', padding: '12px', border: `1px solid ${theme.borderLight}`, borderRadius: '6px', fontSize: '15px', outline: 'none' }}>
+                    <option value="12">12 Months</option>
+                    <option value="24">24 Months</option>
+                    <option value="36">36 Months</option>
+                    <option value="60">5 Years</option>
+                    <option value="120">10 Years</option>
+                  </select>
+                </div>
+              </div>
+
+              <button type="submit" disabled={loanMessage.includes("Success!")} style={{ width: '100%', padding: '15px', backgroundColor: loanMessage.includes("Success!") ? theme.forestGreen : theme.darkBrown, color: 'white', border: 'none', borderRadius: '6px', fontSize: '16px', fontWeight: '600', cursor: loanMessage.includes("Success!") ? 'default' : 'pointer', transition: '0.2s', marginTop: '10px' }}>
+                {loanMessage.includes("Success!") ? '✓ Approved' : 'Submit Application'}
               </button>
             </form>
           </div>
@@ -743,7 +815,7 @@ function App() {
         {/* --- TAB: ACCOUNTS --- */}
         {activeTab === 'accounts' && (
           <div style={{ animation: 'fadeIn 0.5s', display: 'flex', gap: '40px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
-            
+
             {/* LEFT COLUMN (PORTFOLIO LIST) */}
             <div style={{ flex: '1 1 650px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '30px' }}>
@@ -752,206 +824,206 @@ function App() {
               </div>
 
               <div style={{ display: 'grid', gap: '24px' }}>
-              {accountData && accountData.map((account, index) => {
-                const isUnlocked = unlockedAccounts.includes(account.accnum);
+                {accountData && accountData.map((account, index) => {
+                  const isUnlocked = unlockedAccounts.includes(account.accnum);
 
-                return (
-                  <div key={account.accnum} style={{ backgroundColor: theme.cardWhite, border: `1px solid ${theme.borderLight}`, borderRadius: '8px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', overflow: 'hidden', transition: 'all 0.3s' }}>
-                    {/* Header (Public) */}
-                    <div style={{ padding: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: isUnlocked ? `1px solid ${theme.borderLight}` : 'none' }}>
-                      <div>
-                        <div style={{ fontSize: '12px', color: theme.textLight, textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '8px', fontWeight: 'bold' }}>{account.account_type || "ACCOUNT"}</div>
-                        <h3 style={{ margin: '0 0 5px 0', color: theme.darkBrown, fontSize: '24px', fontWeight: '500' }}>{account.username}</h3>
-                        <div style={{ color: '#666', fontFamily: 'monospace', fontSize: '16px', letterSpacing: '1px' }}>•••• {String(account.accnum).slice(-4)}</div>
+                  return (
+                    <div key={account.accnum} style={{ backgroundColor: theme.cardWhite, border: `1px solid ${theme.borderLight}`, borderRadius: '8px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', overflow: 'hidden', transition: 'all 0.3s' }}>
+                      {/* Header (Public) */}
+                      <div style={{ padding: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: isUnlocked ? `1px solid ${theme.borderLight}` : 'none' }}>
+                        <div>
+                          <div style={{ fontSize: '12px', color: theme.textLight, textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '8px', fontWeight: 'bold' }}>{account.account_type || "ACCOUNT"}</div>
+                          <h3 style={{ margin: '0 0 5px 0', color: theme.darkBrown, fontSize: '24px', fontWeight: '500' }}>{account.username}</h3>
+                          <div style={{ color: '#666', fontFamily: 'monospace', fontSize: '16px', letterSpacing: '1px' }}>•••• {String(account.accnum).slice(-4)}</div>
+                        </div>
+
+                        {!isUnlocked ? (
+                          <button
+                            onClick={() => setPinModalOpenFor(account.accnum)}
+                            style={{ backgroundColor: 'transparent', border: `1px solid ${theme.bronze}`, color: theme.darkBrown, padding: '12px 24px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', fontWeight: '600', transition: 'all 0.2s' }}
+                            onMouseOver={(e) => { e.currentTarget.style.backgroundColor = theme.bronze; e.currentTarget.style.color = 'white'; }}
+                            onMouseOut={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = theme.darkBrown; }}
+                          >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6zm9 14H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z" /></svg>
+                            View Balance & History
+                          </button>
+                        ) : (
+                          <div style={{ textAlign: 'right' }}>
+                            <p style={{ color: theme.textLight, margin: '0 0 5px 0', fontSize: '14px' }}>Available Balance</p>
+                            <h2 style={{ margin: 0, color: theme.forestGreen, fontSize: '36px', fontWeight: '300' }}>₹{account.balance ? account.balance.toLocaleString() : 0}</h2>
+                            <button
+                              onClick={() => handleLockAccount(account.accnum)}
+                              style={{ background: 'none', border: 'none', color: theme.textLight, fontSize: '12px', cursor: 'pointer', textDecoration: 'underline', marginTop: '10px', padding: 0 }}
+                            >
+                              Lock Account
+                            </button>
+                          </div>
+                        )}
                       </div>
 
-                      {!isUnlocked ? (
-                        <button
-                          onClick={() => setPinModalOpenFor(account.accnum)}
-                          style={{ backgroundColor: 'transparent', border: `1px solid ${theme.bronze}`, color: theme.darkBrown, padding: '12px 24px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', fontWeight: '600', transition: 'all 0.2s' }}
-                          onMouseOver={(e) => { e.currentTarget.style.backgroundColor = theme.bronze; e.currentTarget.style.color = 'white'; }}
-                          onMouseOut={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = theme.darkBrown; }}
-                        >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6zm9 14H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z" /></svg>
-                          View Balance & History
-                        </button>
-                      ) : (
-                        <div style={{ textAlign: 'right' }}>
-                          <p style={{ color: theme.textLight, margin: '0 0 5px 0', fontSize: '14px' }}>Available Balance</p>
-                          <h2 style={{ margin: 0, color: theme.forestGreen, fontSize: '36px', fontWeight: '300' }}>₹{account.balance ? account.balance.toLocaleString() : 0}</h2>
-                          <button
-                            onClick={() => handleLockAccount(account.accnum)}
-                            style={{ background: 'none', border: 'none', color: theme.textLight, fontSize: '12px', cursor: 'pointer', textDecoration: 'underline', marginTop: '10px', padding: 0 }}
-                          >
-                            Lock Account
-                          </button>
+                      {/* Expanded History View (Private) */}
+                      {isUnlocked && (
+                        <div style={{ backgroundColor: '#FAFAFA', padding: '30px', animation: 'fadeIn 0.4s' }}>
+                          <h4 style={{ color: theme.darkBrown, marginTop: 0, marginBottom: '20px', fontSize: '16px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>Recent Transactions</h4>
+
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                            <tbody>
+                              {account.transactions && account.transactions.length > 0 ? account.transactions.map((tx, idx) => (
+                                <tr key={tx.id || idx} style={{ borderBottom: idx !== account.transactions.length - 1 ? `1px solid ${theme.borderLight}` : 'none' }}>
+                                  <td style={{ padding: '16px 0', color: theme.textLight, width: '120px' }}>{tx.date || "N/A"}</td>
+                                  <td style={{ padding: '16px 0', color: theme.darkBrown, fontWeight: '500' }}>{tx.desc || "Transaction"}</td>
+                                  <td style={{ padding: '16px 0', textAlign: 'right', color: tx.amount > 0 ? theme.forestGreen : theme.darkBrown, fontWeight: '600' }}>
+                                    {tx.amount > 0 ? '+' : ''}{tx.amount ? tx.amount.toLocaleString() : "0"}
+                                  </td>
+                                </tr>
+                              )) : (
+                                <tr>
+                                  <td colSpan="3" style={{ padding: '16px 0', color: theme.textLight, textAlign: 'center' }}>No recent transaction history recorded.</td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
                         </div>
                       )}
                     </div>
-
-                    {/* Expanded History View (Private) */}
-                    {isUnlocked && (
-                      <div style={{ backgroundColor: '#FAFAFA', padding: '30px', animation: 'fadeIn 0.4s' }}>
-                        <h4 style={{ color: theme.darkBrown, marginTop: 0, marginBottom: '20px', fontSize: '16px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>Recent Transactions</h4>
-
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-                          <tbody>
-                            {account.transactions && account.transactions.length > 0 ? account.transactions.map((tx, idx) => (
-                              <tr key={tx.id || idx} style={{ borderBottom: idx !== account.transactions.length - 1 ? `1px solid ${theme.borderLight}` : 'none' }}>
-                                <td style={{ padding: '16px 0', color: theme.textLight, width: '120px' }}>{tx.date || "N/A"}</td>
-                                <td style={{ padding: '16px 0', color: theme.darkBrown, fontWeight: '500' }}>{tx.desc || "Transaction"}</td>
-                                <td style={{ padding: '16px 0', textAlign: 'right', color: tx.amount > 0 ? theme.forestGreen : theme.darkBrown, fontWeight: '600' }}>
-                                  {tx.amount > 0 ? '+' : ''}{tx.amount ? tx.amount.toLocaleString() : "0"}
-                                </td>
-                              </tr>
-                            )) : (
-                              <tr>
-                                <td colSpan="3" style={{ padding: '16px 0', color: theme.textLight, textAlign: 'center' }}>No recent transaction history recorded.</td>
-                              </tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* RIGHT COLUMN (SIDEBAR) */}
-          <div style={{ flex: '0 1 350px', display: 'flex', flexDirection: 'column', gap: '30px' }}>
-              
-            {/* WIDGET 1: Wealth Concierge */}
-            <div style={{ backgroundColor: theme.cardWhite, padding: '24px', borderRadius: '8px', border: `1px solid ${theme.borderLight}`, boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
-              <h4 style={{ color: theme.darkBrown, margin: '0 0 20px 0', fontSize: '16px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>Wealth Concierge</h4>
-              
-              <button onClick={() => setOpenAccountModal(true)} style={{ width: '100%', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'transparent', border: `1px solid ${theme.borderLight}`, borderRadius: '6px', color: theme.darkBrown, fontSize: '14px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s', marginBottom: '10px' }} onMouseOver={(e) => { e.currentTarget.style.backgroundColor = theme.bgWhite; e.currentTarget.style.borderColor = theme.bronze; }} onMouseOut={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.borderColor = theme.borderLight; }}>
-                <span style={{color: theme.bronze, fontSize: '18px'}}>✛</span> Open New Account
-              </button>
-              
-              <button style={{ width: '100%', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'transparent', border: `1px solid ${theme.borderLight}`, borderRadius: '6px', color: theme.darkBrown, fontSize: '14px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s', marginBottom: '10px' }} onMouseOver={(e) => { e.currentTarget.style.backgroundColor = theme.bgWhite; e.currentTarget.style.borderColor = theme.bronze; }} onMouseOut={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.borderColor = theme.borderLight; }}>
-                <span style={{color: theme.bronze, fontSize: '18px'}}>⎘</span> Link External Vault
-              </button>
-              
-              <button style={{ width: '100%', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'transparent', border: `1px solid ${theme.borderLight}`, borderRadius: '6px', color: theme.darkBrown, fontSize: '14px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s', marginBottom: '10px' }} onMouseOver={(e) => { e.currentTarget.style.backgroundColor = theme.bgWhite; e.currentTarget.style.borderColor = theme.bronze; }} onMouseOut={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.borderColor = theme.borderLight; }}>
-                <span style={{color: theme.bronze, fontSize: '18px'}}>✈</span> Request Wire Transfer
-              </button>
-              
-              <button style={{ width: '100%', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: theme.darkBrown, border: `1px solid ${theme.darkBrown}`, borderRadius: '6px', color: 'white', fontSize: '14px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s' }} onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#1A100E'; }} onMouseOut={(e) => { e.currentTarget.style.backgroundColor = theme.darkBrown; }}>
-                <span style={{color: theme.bronze, fontSize: '18px'}}>💬</span> Contact Advisor
-              </button>
-            </div>
-
-            {/* WIDGET 2: Dynamic Allocation Chart */}
-            <div style={{ backgroundColor: theme.cardWhite, padding: '24px', borderRadius: '8px', border: `1px solid ${theme.borderLight}`, boxShadow: '0 4px 15px rgba(0,0,0,0.02)', position: 'relative' }}>
-              <h4 style={{ color: theme.darkBrown, margin: '0 0 10px 0', fontSize: '16px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>Asset Allocation</h4>
-              <p style={{ color: theme.textLight, fontSize: '13px', margin: '0 0 20px 0' }}>Overall Portfolio Distribution</p>
-              
-              <div style={{ position: 'relative', width: '180px', height: '180px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {(() => {
-                   const unlockedAccs = accountData.filter(acc => unlockedAccounts.includes(acc.accnum));
-                   const hasData = unlockedAccs.length > 0;
-                   let gradientString = `conic-gradient(${theme.forestGreen} 0% 35%, ${theme.bronze} 35% 60%, ${theme.darkBrown} 60% 100%)`;
-                   let centerContent = (
-                     <div style={{ position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                       <div style={{ backgroundColor: 'rgba(255,255,255,0.95)', padding: '12px', borderRadius: '50%', marginBottom: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-                         <svg width="20" height="20" viewBox="0 0 24 24" fill={theme.darkBrown}><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6zm9 14H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/></svg>
-                       </div>
-                       <span style={{ fontSize: '11px', fontWeight: 'bold', color: theme.darkBrown, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Unlock Accounts</span>
-                     </div>
-                   );
-
-                   if (hasData) {
-                     const totalBalance = unlockedAccs.reduce((sum, acc) => sum + (acc.balance || 0), 0);
-                     if (totalBalance > 0) {
-                        let currentPercent = 0;
-                        const stops = unlockedAccs.map((acc, idx) => {
-                            const slicePercent = (acc.balance / totalBalance) * 100;
-                            const start = currentPercent;
-                            currentPercent += slicePercent;
-                            const end = currentPercent;
-                            const colorType = (acc.account_type || acc.type || 'SAVINGS').toUpperCase();
-                            const color = colorType === 'SAVINGS' ? theme.forestGreen : theme.darkBrown;
-                            // Add slight styling variation if multiple of same type touch
-                            const filterColor = (idx % 2 === 0) ? color : `${color}E6`; 
-                            // Add 0.5% white gap between slices for visibility
-                            return `${filterColor} ${start}% calc(${end}% - 0.5%), #ffffff calc(${end}% - 0.5%) ${end}%`;
-                        }).join(', ');
-                        gradientString = `conic-gradient(${stops})`;
-                     } else {
-                        // Empty balances but unlocked
-                        gradientString = `conic-gradient(#E0E0E0 0% 100%)`;
-                     }
-
-                     centerContent = (
-                       <div style={{ position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                          <span style={{ fontSize: '11px', fontWeight: 'bold', color: theme.textLight, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Assets</span>
-                          <span style={{ fontSize: '16px', fontWeight: 'bold', color: theme.darkBrown }}>₹{unlockedAccs.reduce((s, a) => s + a.balance, 0).toLocaleString()}</span>
-                       </div>
-                     );
-                   }
-
-                   return (
-                     <>
-                        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: '50%', background: gradientString, filter: hasData ? 'none' : 'blur(5px)', opacity: hasData ? 1 : 0.8, WebkitMaskImage: 'radial-gradient(circle, transparent 55%, black 56%)', maskImage: 'radial-gradient(circle, transparent 55%, black 56%)', transition: 'all 0.5s ease-in-out' }}></div>
-                        {centerContent}
-                     </>
-                   );
-                })()}
+                  );
+                })}
               </div>
-              
-              {/* Legend for Unlocked Accounts */}
-              {unlockedAccounts.length > 0 && (
-                <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {accountData.filter(acc => unlockedAccounts.includes(acc.accnum)).map((acc, idx) => {
-                    const colorType = (acc.account_type || acc.type || 'SAVINGS').toUpperCase();
-                    const color = colorType === 'SAVINGS' ? theme.forestGreen : theme.darkBrown;
-                    return (
-                      <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: color }}></div>
-                          <span style={{ fontSize: '12px', color: theme.textLight }}>...{String(acc.accnum).slice(-4)}</span>
+            </div>
+
+            {/* RIGHT COLUMN (SIDEBAR) */}
+            <div style={{ flex: '0 1 350px', display: 'flex', flexDirection: 'column', gap: '30px' }}>
+
+              {/* WIDGET 1: Wealth Concierge */}
+              <div style={{ backgroundColor: theme.cardWhite, padding: '24px', borderRadius: '8px', border: `1px solid ${theme.borderLight}`, boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
+                <h4 style={{ color: theme.darkBrown, margin: '0 0 20px 0', fontSize: '16px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>Wealth Concierge</h4>
+
+                <button onClick={() => setOpenAccountModal(true)} style={{ width: '100%', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'transparent', border: `1px solid ${theme.borderLight}`, borderRadius: '6px', color: theme.darkBrown, fontSize: '14px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s', marginBottom: '10px' }} onMouseOver={(e) => { e.currentTarget.style.backgroundColor = theme.bgWhite; e.currentTarget.style.borderColor = theme.bronze; }} onMouseOut={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.borderColor = theme.borderLight; }}>
+                  <span style={{ color: theme.bronze, fontSize: '18px' }}>✛</span> Open New Account
+                </button>
+
+                <button style={{ width: '100%', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'transparent', border: `1px solid ${theme.borderLight}`, borderRadius: '6px', color: theme.darkBrown, fontSize: '14px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s', marginBottom: '10px' }} onMouseOver={(e) => { e.currentTarget.style.backgroundColor = theme.bgWhite; e.currentTarget.style.borderColor = theme.bronze; }} onMouseOut={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.borderColor = theme.borderLight; }}>
+                  <span style={{ color: theme.bronze, fontSize: '18px' }}>⎘</span> Link External Vault
+                </button>
+
+                <button style={{ width: '100%', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'transparent', border: `1px solid ${theme.borderLight}`, borderRadius: '6px', color: theme.darkBrown, fontSize: '14px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s', marginBottom: '10px' }} onMouseOver={(e) => { e.currentTarget.style.backgroundColor = theme.bgWhite; e.currentTarget.style.borderColor = theme.bronze; }} onMouseOut={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.borderColor = theme.borderLight; }}>
+                  <span style={{ color: theme.bronze, fontSize: '18px' }}>✈</span> Request Wire Transfer
+                </button>
+
+                <button style={{ width: '100%', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: theme.darkBrown, border: `1px solid ${theme.darkBrown}`, borderRadius: '6px', color: 'white', fontSize: '14px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s' }} onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#1A100E'; }} onMouseOut={(e) => { e.currentTarget.style.backgroundColor = theme.darkBrown; }}>
+                  <span style={{ color: theme.bronze, fontSize: '18px' }}>💬</span> Contact Advisor
+                </button>
+              </div>
+
+              {/* WIDGET 2: Dynamic Allocation Chart */}
+              <div style={{ backgroundColor: theme.cardWhite, padding: '24px', borderRadius: '8px', border: `1px solid ${theme.borderLight}`, boxShadow: '0 4px 15px rgba(0,0,0,0.02)', position: 'relative' }}>
+                <h4 style={{ color: theme.darkBrown, margin: '0 0 10px 0', fontSize: '16px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>Asset Allocation</h4>
+                <p style={{ color: theme.textLight, fontSize: '13px', margin: '0 0 20px 0' }}>Overall Portfolio Distribution</p>
+
+                <div style={{ position: 'relative', width: '180px', height: '180px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {(() => {
+                    const unlockedAccs = accountData.filter(acc => unlockedAccounts.includes(acc.accnum));
+                    const hasData = unlockedAccs.length > 0;
+                    let gradientString = `conic-gradient(${theme.forestGreen} 0% 35%, ${theme.bronze} 35% 60%, ${theme.darkBrown} 60% 100%)`;
+                    let centerContent = (
+                      <div style={{ position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        <div style={{ backgroundColor: 'rgba(255,255,255,0.95)', padding: '12px', borderRadius: '50%', marginBottom: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill={theme.darkBrown}><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6zm9 14H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z" /></svg>
                         </div>
-                        <span style={{ fontSize: '12px', fontWeight: '600', color: theme.darkBrown }}>₹{acc.balance.toLocaleString()}</span>
+                        <span style={{ fontSize: '11px', fontWeight: 'bold', color: theme.darkBrown, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Unlock Accounts</span>
                       </div>
                     );
-                  })}
+
+                    if (hasData) {
+                      const totalBalance = unlockedAccs.reduce((sum, acc) => sum + (acc.balance || 0), 0);
+                      if (totalBalance > 0) {
+                        let currentPercent = 0;
+                        const stops = unlockedAccs.map((acc, idx) => {
+                          const slicePercent = (acc.balance / totalBalance) * 100;
+                          const start = currentPercent;
+                          currentPercent += slicePercent;
+                          const end = currentPercent;
+                          const colorType = (acc.account_type || acc.type || 'SAVINGS').toUpperCase();
+                          const color = colorType === 'SAVINGS' ? theme.forestGreen : theme.darkBrown;
+                          // Add slight styling variation if multiple of same type touch
+                          const filterColor = (idx % 2 === 0) ? color : `${color}E6`;
+                          // Add 0.5% white gap between slices for visibility
+                          return `${filterColor} ${start}% calc(${end}% - 0.5%), #ffffff calc(${end}% - 0.5%) ${end}%`;
+                        }).join(', ');
+                        gradientString = `conic-gradient(${stops})`;
+                      } else {
+                        // Empty balances but unlocked
+                        gradientString = `conic-gradient(#E0E0E0 0% 100%)`;
+                      }
+
+                      centerContent = (
+                        <div style={{ position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                          <span style={{ fontSize: '11px', fontWeight: 'bold', color: theme.textLight, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Assets</span>
+                          <span style={{ fontSize: '16px', fontWeight: 'bold', color: theme.darkBrown }}>₹{unlockedAccs.reduce((s, a) => s + a.balance, 0).toLocaleString()}</span>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <>
+                        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: '50%', background: gradientString, filter: hasData ? 'none' : 'blur(5px)', opacity: hasData ? 1 : 0.8, WebkitMaskImage: 'radial-gradient(circle, transparent 55%, black 56%)', maskImage: 'radial-gradient(circle, transparent 55%, black 56%)', transition: 'all 0.5s ease-in-out' }}></div>
+                        {centerContent}
+                      </>
+                    );
+                  })()}
                 </div>
-              )}
+
+                {/* Legend for Unlocked Accounts */}
+                {unlockedAccounts.length > 0 && (
+                  <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {accountData.filter(acc => unlockedAccounts.includes(acc.accnum)).map((acc, idx) => {
+                      const colorType = (acc.account_type || acc.type || 'SAVINGS').toUpperCase();
+                      const color = colorType === 'SAVINGS' ? theme.forestGreen : theme.darkBrown;
+                      return (
+                        <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: color }}></div>
+                            <span style={{ fontSize: '12px', color: theme.textLight }}>...{String(acc.accnum).slice(-4)}</span>
+                          </div>
+                          <span style={{ fontSize: '12px', fontWeight: '600', color: theme.darkBrown }}>₹{acc.balance.toLocaleString()}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* WIDGET 3: Market Intelligence */}
+              <div style={{ backgroundColor: theme.bgWhite, padding: '24px', borderRadius: '8px', border: `1px solid ${theme.borderLight}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <h4 style={{ color: theme.darkBrown, margin: 0, fontSize: '16px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>Global Insights</h4>
+                  <div style={{ width: '8px', height: '8px', backgroundColor: theme.forestGreen, borderRadius: '50%', boxShadow: `0 0 8px ${theme.forestGreen}` }}></div>
+                </div>
+
+                <div style={{ borderBottom: `1px solid ${theme.borderLight}`, paddingBottom: '16px', marginBottom: '16px', cursor: 'pointer' }} onMouseOver={(e) => e.currentTarget.querySelector('h5').style.color = theme.bronze} onMouseOut={(e) => e.currentTarget.querySelector('h5').style.color = theme.darkBrown}>
+                  <span style={{ fontSize: '11px', color: theme.textLight, textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 'bold' }}>Equities • 2H Ago</span>
+                  <h5 style={{ margin: '6px 0', fontSize: '14px', color: theme.darkBrown, transition: 'color 0.2s' }}>Algorithmic Trading Strategies for Q3 Tech Rallies</h5>
+                </div>
+
+                <div style={{ cursor: 'pointer' }} onMouseOver={(e) => e.currentTarget.querySelector('h5').style.color = theme.bronze} onMouseOut={(e) => e.currentTarget.querySelector('h5').style.color = theme.darkBrown}>
+                  <span style={{ fontSize: '11px', color: theme.textLight, textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 'bold' }}>Macro • Today</span>
+                  <h5 style={{ margin: '6px 0', fontSize: '14px', color: theme.darkBrown, transition: 'color 0.2s' }}>Federal Reserve Outlines Potential 2026 Rate Cuts</h5>
+                </div>
+              </div>
+
             </div>
-
-            {/* WIDGET 3: Market Intelligence */}
-            <div style={{ backgroundColor: theme.bgWhite, padding: '24px', borderRadius: '8px', border: `1px solid ${theme.borderLight}` }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <h4 style={{ color: theme.darkBrown, margin: 0, fontSize: '16px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>Global Insights</h4>
-                <div style={{ width: '8px', height: '8px', backgroundColor: theme.forestGreen, borderRadius: '50%', boxShadow: `0 0 8px ${theme.forestGreen}` }}></div>
-              </div>
-              
-              <div style={{ borderBottom: `1px solid ${theme.borderLight}`, paddingBottom: '16px', marginBottom: '16px', cursor: 'pointer' }} onMouseOver={(e) => e.currentTarget.querySelector('h5').style.color = theme.bronze} onMouseOut={(e) => e.currentTarget.querySelector('h5').style.color = theme.darkBrown}>
-                <span style={{ fontSize: '11px', color: theme.textLight, textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 'bold' }}>Equities • 2H Ago</span>
-                <h5 style={{ margin: '6px 0', fontSize: '14px', color: theme.darkBrown, transition: 'color 0.2s' }}>Algorithmic Trading Strategies for Q3 Tech Rallies</h5>
-              </div>
-
-              <div style={{ cursor: 'pointer' }} onMouseOver={(e) => e.currentTarget.querySelector('h5').style.color = theme.bronze} onMouseOut={(e) => e.currentTarget.querySelector('h5').style.color = theme.darkBrown}>
-                <span style={{ fontSize: '11px', color: theme.textLight, textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 'bold' }}>Macro • Today</span>
-                <h5 style={{ margin: '6px 0', fontSize: '14px', color: theme.darkBrown, transition: 'color 0.2s' }}>Federal Reserve Outlines Potential 2026 Rate Cuts</h5>
-              </div>
-            </div>
-
           </div>
-        </div>
         )}
 
         {/* --- TAB: TRANSACT & TRANSFER --- */}
         {activeTab === 'transact & transfer' && (
           <div style={{ animation: 'fadeIn 0.5s' }}>
             <h2 style={{ color: theme.darkBrown, fontWeight: '300', marginBottom: '30px', fontSize: '32px' }}>Move Capital</h2>
-            
+
             {txStatus === 'success' ? (
               <div style={{ backgroundColor: theme.cardWhite, padding: '60px 40px', borderRadius: '8px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', borderTop: `4px solid ${theme.forestGreen}`, textAlign: 'center', animation: 'fadeIn 0.5s' }}>
                 <div style={{ width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#E8F5E9', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto' }}>
-                  <svg width="40" height="40" viewBox="0 0 24 24" fill={theme.forestGreen}><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill={theme.forestGreen}><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" /></svg>
                 </div>
                 <h3 style={{ color: theme.darkBrown, fontSize: '28px', marginBottom: '10px' }}>Transaction Executed</h3>
                 <p style={{ color: theme.textLight, fontSize: '16px', marginBottom: '40px' }}>{txMessage}</p>
@@ -961,10 +1033,10 @@ function App() {
               </div>
             ) : (
               <div style={{ display: 'flex', gap: '40px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                
+
                 {/* LEFT: EXECUTION TERMINAL */}
                 <div style={{ flex: '1 1 600px', backgroundColor: theme.cardWhite, padding: '40px', borderRadius: '8px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', border: `1px solid ${theme.borderLight}` }}>
-                  
+
                   {/* Action Selection Segmented Control */}
                   <div style={{ display: 'flex', backgroundColor: theme.bgWhite, borderRadius: '8px', padding: '6px', marginBottom: '40px', border: `1px solid ${theme.borderLight}` }}>
                     {['DEPOSIT', 'WITHDRAW', 'TRANSFER'].map(type => (
@@ -1021,7 +1093,7 @@ function App() {
                 <div style={{ flex: '0 1 350px' }}>
                   <div style={{ backgroundColor: theme.bgWhite, padding: '30px', borderRadius: '8px', border: `1px solid ${theme.borderLight}` }}>
                     <h4 style={{ color: theme.darkBrown, margin: '0 0 20px 0', fontSize: '14px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: `1px solid ${theme.borderLight}`, paddingBottom: '10px' }}>Security Protocol</h4>
-                    
+
                     <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '20px' }}>
                       <div style={{ width: '30px', height: '30px', borderRadius: '50%', backgroundColor: theme.cardWhite, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${theme.bronze}`, fontSize: '14px', color: theme.bronze }}>✓</div>
                       <div>
@@ -1029,7 +1101,7 @@ function App() {
                         <div style={{ fontSize: '11px', color: theme.textLight }}>Bank-grade secure tunnel</div>
                       </div>
                     </div>
-                    
+
                     <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '20px' }}>
                       <div style={{ width: '30px', height: '30px', borderRadius: '50%', backgroundColor: theme.cardWhite, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${theme.bronze}`, fontSize: '14px', color: theme.bronze }}>✓</div>
                       <div>
@@ -1049,17 +1121,17 @@ function App() {
                     <div style={{ backgroundColor: theme.cardWhite, padding: '20px', borderRadius: '6px', border: `1px dashed ${theme.borderLight}` }}>
                       <div style={{ fontSize: '10px', color: theme.textLight, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '10px' }}>Transaction Profile</div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                         <span style={{ fontSize: '13px', color: theme.textLight }}>Action</span>
-                         <span style={{ fontSize: '13px', fontWeight: 'bold', color: theme.darkBrown }}>{txType}</span>
+                        <span style={{ fontSize: '13px', color: theme.textLight }}>Action</span>
+                        <span style={{ fontSize: '13px', fontWeight: 'bold', color: theme.darkBrown }}>{txType}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                         <span style={{ fontSize: '13px', color: theme.textLight }}>Principal Amount</span>
-                         <span style={{ fontSize: '13px', fontWeight: 'bold', color: theme.forestGreen }}>{txAmount ? `₹${parseFloat(txAmount).toLocaleString()}` : '--'}</span>
+                        <span style={{ fontSize: '13px', color: theme.textLight }}>Principal Amount</span>
+                        <span style={{ fontSize: '13px', fontWeight: 'bold', color: theme.forestGreen }}>{txAmount ? `₹${parseFloat(txAmount).toLocaleString()}` : '--'}</span>
                       </div>
                       {txType === 'TRANSFER' && (
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                           <span style={{ fontSize: '13px', color: theme.textLight }}>Target Node</span>
-                           <span style={{ fontSize: '13px', fontWeight: 'bold', color: theme.darkBrown, fontFamily: 'monospace' }}>{txDestAcc ? `...${txDestAcc.slice(-4)}` : '--'}</span>
+                          <span style={{ fontSize: '13px', color: theme.textLight }}>Target Node</span>
+                          <span style={{ fontSize: '13px', fontWeight: 'bold', color: theme.darkBrown, fontFamily: 'monospace' }}>{txDestAcc ? `...${txDestAcc.slice(-4)}` : '--'}</span>
                         </div>
                       )}
                     </div>
@@ -1067,30 +1139,30 @@ function App() {
 
                   {/* RECENT TRANSACTIONS WIDGET */}
                   <div style={{ backgroundColor: theme.bgWhite, padding: '30px', borderRadius: '8px', border: `1px solid ${theme.borderLight}`, animation: 'fadeIn 0.5s', marginTop: '20px' }}>
-                     <h4 style={{ color: theme.darkBrown, margin: '0 0 20px 0', fontSize: '14px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: `1px solid ${theme.borderLight}`, paddingBottom: '10px' }}>Ledger History</h4>
-                     {txSourceAcc ? (
-                       (() => {
-                         const acc = accountData.find(a => a.accnum === txSourceAcc);
-                         if (acc && acc.transactions && acc.transactions.length > 0) {
-                           // Try displaying up to 4 recent transactions
-                           return acc.transactions.slice(0, 4).map((tx, idx) => (
-                              <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: idx === acc.transactions.length - 1 ? 'none' : `1px solid ${theme.borderLight}` }}>
-                                 <div>
-                                   <div style={{ fontSize: '13px', fontWeight: 'bold', color: theme.darkBrown, textTransform: 'capitalize' }}>{tx.type || tx.desc || "Transaction"}</div>
-                                   <div style={{ fontSize: '11px', color: theme.textLight }}>{tx.date || new Date().toLocaleDateString()} • ID: {tx.id || '--'}</div>
-                                 </div>
-                                 <div style={{ fontSize: '14px', fontWeight: 'bold', color: tx.amount < 0 || tx.type === 'Withdraw' ? '#D32F2F' : theme.forestGreen }}>
-                                    {tx.amount > 0 && tx.type !== 'Withdraw' ? '+' : ''}₹{Math.abs(tx.amount).toLocaleString()}
-                                 </div>
+                    <h4 style={{ color: theme.darkBrown, margin: '0 0 20px 0', fontSize: '14px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: `1px solid ${theme.borderLight}`, paddingBottom: '10px' }}>Ledger History</h4>
+                    {txSourceAcc ? (
+                      (() => {
+                        const acc = accountData.find(a => a.accnum === txSourceAcc);
+                        if (acc && acc.transactions && acc.transactions.length > 0) {
+                          // Try displaying up to 4 recent transactions
+                          return acc.transactions.slice(0, 4).map((tx, idx) => (
+                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: idx === acc.transactions.length - 1 ? 'none' : `1px solid ${theme.borderLight}` }}>
+                              <div>
+                                <div style={{ fontSize: '13px', fontWeight: 'bold', color: theme.darkBrown, textTransform: 'capitalize' }}>{tx.type || tx.desc || "Transaction"}</div>
+                                <div style={{ fontSize: '11px', color: theme.textLight }}>{tx.date || new Date().toLocaleDateString()} • ID: {tx.id || '--'}</div>
                               </div>
-                           ));
-                         } else {
-                           return <div style={{ fontSize: '13px', color: theme.textLight, textAlign: 'center', padding: '20px 0' }}>No transactions recorded in current ledger session.</div>;
-                         }
-                       })()
-                     ) : (
-                       <div style={{ fontSize: '13px', color: theme.textLight, textAlign: 'center', padding: '20px 0' }}>Select an originating account to view history.</div>
-                     )}
+                              <div style={{ fontSize: '14px', fontWeight: 'bold', color: tx.amount < 0 || tx.type === 'Withdraw' ? '#D32F2F' : theme.forestGreen }}>
+                                {tx.amount > 0 && tx.type !== 'Withdraw' ? '+' : ''}₹{Math.abs(tx.amount).toLocaleString()}
+                              </div>
+                            </div>
+                          ));
+                        } else {
+                          return <div style={{ fontSize: '13px', color: theme.textLight, textAlign: 'center', padding: '20px 0' }}>No transactions recorded in current ledger session.</div>;
+                        }
+                      })()
+                    ) : (
+                      <div style={{ fontSize: '13px', color: theme.textLight, textAlign: 'center', padding: '20px 0' }}>Select an originating account to view history.</div>
+                    )}
                   </div>
 
                 </div>
@@ -1101,12 +1173,85 @@ function App() {
         )}
 
         {/* --- TAB: LOANS --- */}
+        {/* --- TAB: LOANS --- */}
         {activeTab === 'loans' && (
           <div style={{ animation: 'fadeIn 0.5s' }}>
             <h2 style={{ color: theme.darkBrown, fontWeight: '300', marginBottom: '30px', fontSize: '32px' }}>Credit & Lending</h2>
-            <div style={{ backgroundColor: theme.cardWhite, padding: '40px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', borderTop: `4px solid ${theme.darkBrown}` }}>
-              <p style={{ color: theme.textLight, margin: 0 }}>UI for loan applications and active credit lines will go here.</p>
+
+            {/* Top Stat Row */}
+            <div style={{ display: 'flex', gap: '20px', marginBottom: '40px', flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 250px', backgroundColor: theme.cardWhite, padding: '30px', borderRadius: '8px', border: `1px solid ${theme.borderLight}`, boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                <div style={{ fontSize: '12px', color: theme.textLight, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '10px' }}>Total Outstanding Liability</div>
+                <div style={{ fontSize: '32px', color: theme.darkBrown, fontWeight: 'bold' }}>
+                  {accountData ? `₹${accountData.reduce((sum, acc) => sum + (acc.activeLoans ? acc.activeLoans.reduce((ls, l) => ls + l.principleAmount, 0) : 0), 0).toLocaleString()}` : '₹0'}
+                </div>
+              </div>
+              <div style={{ flex: '1 1 250px', backgroundColor: theme.cardWhite, padding: '30px', borderRadius: '8px', border: `1px solid ${theme.borderLight}`, boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                <div style={{ fontSize: '12px', color: theme.textLight, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '10px' }}>Active Credit Lines</div>
+                <div style={{ fontSize: '32px', color: theme.darkBrown, fontWeight: 'bold' }}>
+                  {accountData ? accountData.reduce((count, acc) => count + (acc.activeLoans ? acc.activeLoans.length : 0), 0) : 0}
+                </div>
+              </div>
+              <div onClick={() => setOpenLoanModal(true)} style={{ flex: '1 1 250px', backgroundColor: theme.darkBrown, padding: '30px', borderRadius: '8px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'center', transition: '0.2s', border: `1px solid ${theme.darkBrown}` }} onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#1A1A1A'; }} onMouseOut={(e) => { e.currentTarget.style.backgroundColor = theme.darkBrown; }}>
+                <div style={{ fontSize: '16px', color: theme.bronze, textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '20px' }}>✛</span> Apply for Capital
+                </div>
+                <div style={{ fontSize: '13px', color: '#D0D0D0', marginTop: '5px' }}>Instant algorithmic approval</div>
+              </div>
             </div>
+
+            {/* Active Loan Ledgers */}
+            <h3 style={{ color: theme.darkBrown, fontSize: '20px', marginBottom: '20px', fontWeight: '400', letterSpacing: '0.5px' }}>Active Credit Portfolio</h3>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '30px' }}>
+              {accountData && accountData.map(acc =>
+                acc.activeLoans && acc.activeLoans.map((loan, idx) => (
+                  <div key={`${acc.accnum}-${idx}`} style={{ backgroundColor: theme.cardWhite, borderRadius: '8px', border: `1px solid ${theme.borderLight}`, overflow: 'hidden', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                    <div style={{ padding: '20px 25px', backgroundColor: theme.bgWhite, borderBottom: `1px solid ${theme.borderLight}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 'bold', color: theme.darkBrown, textTransform: 'uppercase', letterSpacing: '1px' }}>{loan.loanType.replace('_', ' ')}</span>
+                      <span style={{ fontSize: '11px', color: theme.textLight, fontFamily: 'monospace' }}>A/C •••• {String(acc.accnum).slice(-4)}</span>
+                    </div>
+
+                    <div style={{ padding: '30px 25px' }}>
+                      <div style={{ fontSize: '11px', color: theme.textLight, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>Outstanding Principal</div>
+                      <div style={{ fontSize: '28px', color: theme.darkBrown, fontWeight: 'bold', marginBottom: '25px' }}>₹{loan.principleAmount.toLocaleString()}</div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
+                        <span style={{ fontSize: '13px', color: theme.textLight }}>Algorithmic Base Rate</span>
+                        <span style={{ fontSize: '14px', fontWeight: 'bold', color: theme.darkBrown }}>{loan.interestRate}%</span>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
+                        <span style={{ fontSize: '13px', color: theme.textLight }}>Remaining Tenure</span>
+                        <span style={{ fontSize: '14px', fontWeight: 'bold', color: theme.darkBrown }}>{loan.tenure} Months</span>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: `1px dashed ${theme.borderLight}`, paddingTop: '15px', marginTop: '5px' }}>
+                        <span style={{ fontSize: '13px', color: theme.forestGreen, fontWeight: 'bold' }}>Calculated Monthly EMI</span>
+                        <span style={{ fontSize: '14px', fontWeight: 'bold', color: theme.forestGreen }}>
+                          {(() => {
+                            const r = loan.interestRate / 100 / 12;
+                            const n = loan.tenure;
+                            const emi = Math.round(loan.principleAmount * r * Math.pow(1 + r, n) / (Math.pow(1 + r, n) - 1));
+                            return `₹${emi.toLocaleString()}`;
+                          })()}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Zero Debt Default Screen */}
+            {(!accountData || accountData.reduce((c, a) => c + (a.activeLoans ? a.activeLoans.length : 0), 0) === 0) && (
+              <div style={{ padding: '60px 40px', backgroundColor: theme.bgWhite, borderRadius: '8px', border: `1px dashed ${theme.borderLight}`, textAlign: 'center', marginTop: '20px' }}>
+                <div style={{ fontSize: '48px', marginBottom: '20px' }}>🏛️</div>
+                <h4 style={{ color: theme.darkBrown, fontSize: '20px', marginBottom: '10px' }}>No Active Debt Obligations</h4>
+                <p style={{ color: theme.textLight, fontSize: '15px', maxWidth: '400px', margin: '0 auto' }}>Your credit profile is clear. Leverage your existing assets and explore algorithmically optimized capital allocation programs using our secure portal above.</p>
+              </div>
+            )}
+
           </div>
         )}
 

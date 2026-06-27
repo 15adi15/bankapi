@@ -5,14 +5,12 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 
 public class DatabaseConnection {
-    // The connection path to local PostgreSQL server and bank_db
-    private static final String URL = "jdbc:postgresql://localhost:5432/bank_db";
+    // The connection path to PostgreSQL server
+    private static final String URL = System.getenv("DB_URL") != null ? System.getenv("DB_URL") : "jdbc:postgresql://localhost:5432/bank_db";
 
-    // Mac username that owns the database
-    private static final String USER = "adityasanjaybhore";
-
-    // Homebrew default has no password
-    private static final String PASSWORD = "";
+    // Use environment variables for credentials to avoid hardcoding sensitive information
+    private static final String USER = System.getenv("DB_USER") != null ? System.getenv("DB_USER") : "postgres";
+    private static final String PASSWORD = System.getenv("DB_PASSWORD") != null ? System.getenv("DB_PASSWORD") : "";
 
     // This method attempts to open a connection and return it
     public static Connection getConnection() {

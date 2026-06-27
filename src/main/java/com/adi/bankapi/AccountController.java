@@ -6,7 +6,7 @@ import java.util.List;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@CrossOrigin(origins = "http://localhost:5173")
+@CrossOrigin(origins = "${FRONTEND_URL:http://localhost:5173}")
 @RequestMapping("/api/accounts")
 public class AccountController {
 
@@ -18,7 +18,8 @@ public class AccountController {
     }
 
     // we need to create an Data Transfer object to handle the abstract Account
-    // class issue.
+    // class issue that occurs with Jackson.
+
     public static class AccountRequestDTO {
         public String username;
         public int pin;
@@ -75,7 +76,8 @@ public class AccountController {
             return "Transaction Failed " + e.getMessage();
         }
         accountDAO.updateAccountBalance(accNum, currentAccount.getBalance());
-        accountDAO.saveTransaction(accNum, transactiondata.action.toUpperCase(), transactiondata.amount, currentAccount.getBalance());
+        accountDAO.saveTransaction(accNum, transactiondata.action.toUpperCase(), transactiondata.amount,
+                currentAccount.getBalance());
         return "Transaction Successfull " + transactiondata.action + "New Balance: ₹" + currentAccount.getBalance();
     }
 
@@ -115,6 +117,38 @@ public class AccountController {
             return "Transaction Failed! " + e.getMessage();
         }
 
+    }
+
+    // -------The Loan Application End Point--------
+    public static class LoanRequestDTO {
+        public int accNum;
+        public String loanType; // "HOME_LOAN", "PERSONAL_LOAN", "EDUCATION_LOAN"
+        public double principleAmount;
+        public int tenureMonths;
+    }
+
+    @PostMapping("/loan")
+    public String applyForLoan(@RequestBody LoanRequestDTO data) {
+        Accounts targetAccount = accountDAO.getAccountByAccnum(data.accNum);
+        if (targetAccount == null) {
+            return "Error: Account not found.";
+        }
+
+        Loan newLoan = null;
+        if ("HOME_LOAN".equalsIgnoreCase(data.loanType)) {
+            newLoan = new Home_Loan(targetAccount.getUsername(), data.principleAmount, data.tenureMonths);
+        } else if ("PERSONAL_LOAN".equalsIgnoreCase(data.loanType)) {
+            newLoan = new Personal_Loan(targetAccount.getUsername(), data.principleAmount, data.tenureMonths);
+        } else if ("EDUCATION_LOAN".equalsIgnoreCase(data.loanType)) {
+            newLoan = new Education_Loan(targetAccount.getUsername(), data.principleAmount, data.tenureMonths);
+        } else {
+            return "Error: Invalid Loan Type.";
+        }
+
+        LoanDAO loanDAO = new LoanDAO();
+        loanDAO.saveLoan(data.accNum, newLoan);
+
+        return "Success! " + data.loanType + " approved for ₹" + data.principleAmount;
     }
 
     // The Login DTO

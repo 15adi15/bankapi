@@ -139,7 +139,7 @@ class AccountDAO {
         String sql = "SELECT * FROM accounts WHERE acc_num = ?";
         Accounts fetchedAccount = null;
 
-        try (Connection conn = DatabaseConnection.getConnection(); // Fixed the lowercase 'b'
+        try (Connection conn = DatabaseConnection.getConnection();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
             pstmt.setInt(1, accNum);
