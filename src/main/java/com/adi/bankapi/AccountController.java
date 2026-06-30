@@ -12,6 +12,18 @@ public class AccountController {
 
     private AccountDAO accountDAO = new AccountDAO();
 
+    @GetMapping("/debugenv")
+    public String debugEnv() {
+        try {
+            String url = System.getenv("DB_URL");
+            String user = System.getenv("DB_USER");
+            String pass = System.getenv("DB_PASSWORD");
+            java.sql.Connection conn = java.sql.DriverManager.getConnection(url, user, pass);
+            return "Connection Successful! URL=" + url + ", USER=" + user + ", PASS_LENGTH=" + (pass != null ? pass.length() : "null");
+        } catch (Exception e) {
+            return "Connection Failed: " + e.getMessage() + " | URL=" + System.getenv("DB_URL") + " | USER=" + System.getenv("DB_USER") + " | PASS_LENGTH=" + (System.getenv("DB_PASSWORD") != null ? System.getenv("DB_PASSWORD").length() : "null");
+        }
+    }
     @GetMapping("/{acc_num}")
     public Accounts getAccountInfo(@PathVariable int acc_num) {
         return accountDAO.getAccountByAccnum(acc_num);
